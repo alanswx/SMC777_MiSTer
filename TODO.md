@@ -1,8 +1,9 @@
 # SMC-777 MiSTer core: status and remaining work
 
-Status 2026-10-16: verified in simulation against CSP (eSMC-777). Quartus 17.0.2 build (misterubuntu): fits (15,745
-ALMs 38%, 449/553 RAM blocks 81%, 3.56 Mbit), timing met (slow 85C model: core PLL 64.44 MHz +1.704 ns setup,
-+0.252 ns hold, TNS 0 on all clocks). releases/SMC777_20261016.rbf. Not yet run on a MiSTer.
+Status 2026-10-17: verified in simulation against CSP (eSMC-777); mouse added (SMC Paint). Quartus 17.0.2 build
+(misterubuntu): fits (15,935 ALMs 38%, 449/553 RAM blocks 81%, 3.56 Mbit), timing met (slow 85C model: core PLL
+64.44 MHz +1.924 ns setup, +0.247 ns hold, TNS 0 on all clocks). releases/SMC777_20261017.rbf. Not yet run on a
+MiSTer.
 
 ## Done (simulation, compared with CSP)
 
@@ -35,7 +36,11 @@ real display); restored from mc6845.vhd.
   after BASIC SAVE "test" the sim's image is byte-identical to CSP's written copy.
 - Cassette: untested (no SMC-777 tape images in the library); test with a WAV through line-in.
 - Joysticks: port 51h values equal CSP's (run_tests joystick); not yet tried with a game (Dragon expects port 1).
-  Mouse (SMCPAINT, port 2) not implemented.
+- Mouse (OSD Port 2 = Mouse, `rtl/smc777_mouse.sv`): neither CSP nor MAME emulates it, so the protocol is taken from
+  SMC Paint 2.3's driver (MSX style: OUT 51h pin 5 strobe, nibbles X hi/lo, Y hi/lo on bits 3-0; buttons on the trigger bits 4/5).
+  SMC Paint's pointer follows the mouse in the sim. Unknown: the real mouse's sign/scale and the strobe timing it
+  needs, and whether other software (graphics editors) uses the same protocol. SMC Paint also has a serial mouse
+  driver (ports 26h/27h, Microsoft 3-byte packets) patched out; RS-232 is not modelled.
 - Interlace / 400-line modes (CP/M setup in MAME's TODO) and CRTC R9 != 7 rasters: nothing in the library uses them.
 - Floppy-less boot paths: auto-start ROM (70h), the SMC-70 (RTC, extra graphics modes) are not modelled.
 - Printer (22h/1Dh), RS-232, expansion bus: not modelled.

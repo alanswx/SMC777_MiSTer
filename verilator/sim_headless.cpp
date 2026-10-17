@@ -60,6 +60,9 @@ struct Options {
     bool        fdd_readonly = false;     // --fdd-readonly: never write back to the image files
     struct JoyEv { uint32_t frame; int port; uint32_t bits; };
     std::vector<JoyEv> joy;               // --joy FRAME:PORT:BITS
+    bool        mouse = false;            // --mouse: joystick port 2 has the mouse (OSD option)
+    struct MouseEv { uint32_t frame; int dx, dy, buttons; };
+    std::vector<MouseEv> mouse_moves;     // --mouse-move FRAME:DX:DY[:BUTTONS]
     std::set<uint32_t> resets;            // --reset-at / --warm-reset-at FRAME
     std::set<uint32_t> warm_resets;
     std::string wav_file;                 // --wav
@@ -79,6 +82,9 @@ static void usage()
 "  --fdd FILE             D88/.1dd image in drive A; --fdd-b FILE: drive B; --fdd-readonly: don't write to them\n"
 "  --type FRAME:TEXT      type TEXT from FRAME (US PS/2 layout); \\n or {RETURN}, {ESC}, {F1}, {WAITn} ...\n"
 "  --joy F:PORT:BITS      joystick PORT (0/1) MiSTer bits from frame F (1 right 2 left 4 down 8 up 16/32 buttons)\n"
+"  --mouse                the mouse on joystick port 2 instead of joystick 2 (OSD option)\n"
+"  --mouse-move F:DX:DY[:B]  move the mouse DX right, DY down from frame F (PS/2 packets, one per ms); buttons B\n"
+"                         (1 left, 2 right) from then on\n"
 "  --reset-at F           cold reset before frame F; --warm-reset-at F: warm reset (RESET key, port 1Ch bit 7)\n"
 "  --type-rate P:R        frames per key press:release (default 4:4)\n"
 "  --screenshot N         PNG of frame N (repeatable)\n"
@@ -150,6 +156,14 @@ static bool parse_args(int argc, char **argv, Options &o)
             if (sscanf(next().c_str(), "%u:%d:%i", &j.frame, &j.port, &j.bits) != 3) { fprintf(stderr, "--joy wants F:PORT:BITS\n"); return false; }
             o.joy.push_back(j);
         }
+        else if (a == "--mouse") o.mouse = true;
+        else if (a == "--mouse-move") {
+            Options::MouseEv m{};
+            int n = sscanf(next().c_str(), "%u:%d:%d:%i", &m.frame, &m.dx, &m.dy, &m.buttons);
+            if (n < 3) { fprintf(stderr, "--mouse-move wants F:DX:DY[:BUTTONS]\n"); return false; }
+            o.mouse = true;
+            o.mouse_moves.push_back(m);
+        }
         else if (a == "--wav") o.wav_file = next();
         else if (a == "--save-state") { if (!pair("FRAME:FILE", o.save_frame, o.save_file)) return false; }
         else if (a == "--load-state") o.load_file = next();
@@ -200,6 +214,12 @@ private:
         uint16_t last_pc;
         int32_t  fb_w;
     };
+
+    // hps_io style ps2_mouse packets: [24] toggles, [23:16] Y (up positive), [15:8] X, [5]/[4] Y/X sign, [1:0] buttons
+    std::deque<uint32_t> mouse_queue;
+    uint64_t mouse_next_ok = 0;
+    int      mouse_buttons = 0;
+    void     queue_mouse(int dx, int dy, int buttons);
 
     void clock();
     void end_frame();
@@ -468,6 +488,24 @@ void Sim::clock()
         top->ps2_key = (uint16_t)((ps2_toggle << 10) | (e.press << 9) | (e.ext << 8) | e.code);
         ps2_next_ok = cycle + (uint64_t)(CLK_HZ / 1000);
     }
+    if (!mouse_queue.empty() && cycle >= mouse_next_ok) {
+        uint32_t p = mouse_queue.front();
+        mouse_queue.pop_front();
+        top->ps2_mouse = (((top->ps2_mouse >> 24) & 1) ^ 1) << 24 | p;
+        mouse_next_ok = cycle + (uint64_t)(CLK_HZ / 1000);
+    }
+}
+
+void Sim::queue_mouse(int dx, int dy, int buttons)
+{
+    mouse_buttons = buttons;
+    do {
+        int x = dx > 100 ? 100 : dx < -100 ? -100 : dx;
+        int y = dy > 100 ? 100 : dy < -100 ? -100 : dy;
+        dx -= x; dy -= y;
+        int py = -y;   // PS/2: up is positive
+        mouse_queue.push_back((uint32_t)((py & 0xff) << 16 | (x & 0xff) << 8 | (py < 0) << 5 | (x < 0) << 4 | 8 | (buttons & 3)));
+    } while (dx || dy);
 }
 
 void Sim::end_frame()
@@ -486,6 +524,7 @@ void Sim::end_frame()
     auto range = ps2_schedule.equal_range(frame);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
     for (auto &j : opt.joy) if (j.frame == frame) { if (j.port) top->joy1 = j.bits; else top->joy0 = j.bits; }
+    for (auto &m : opt.mouse_moves) if (m.frame == frame) queue_mouse(m.dx, m.dy, m.buttons);
     if (opt.resets.count(frame)) reset_machine(false);
     if (opt.warm_resets.count(frame)) reset_machine(true);
 }
@@ -575,6 +614,7 @@ int Sim::run()
     if (!opt.load_file.empty()) {
         if (!load_state()) return 2;
         top->border_en = opt.border;
+        top->mouse_en = opt.mouse;
         started = true;
         wav_on = true;
         wav_next = (double)cycle;
@@ -587,6 +627,8 @@ int Sim::run()
     top->reset_warm = 0;
     top->border_en = opt.border;
     top->joy0 = 0; top->joy1 = 0;
+    top->mouse_en = opt.mouse;
+    top->ps2_mouse = 0;
     top->ps2_key = 0;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();

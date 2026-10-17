@@ -208,6 +208,7 @@ localparam CONF_STR = {
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O[4:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"O[5],Border,Off,On;",
+	"O[6],Port 2,Joystick,Mouse;",
 	"-;",
 	"F0,ROM,Load boot ROM;",
 	"-;",
@@ -223,6 +224,7 @@ wire [21:0] gamma_bus;
 wire  [1:0] buttons;
 wire [127:0] status;
 wire [10:0] ps2_key;
+wire [24:0] ps2_mouse;
 wire [31:0] joystick_0, joystick_1;
 
 wire        ioctl_download;
@@ -256,6 +258,7 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 	.status_menumask(16'd0),
 
 	.ps2_key(ps2_key),
+	.ps2_mouse(ps2_mouse),
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),
 
@@ -327,6 +330,8 @@ smc777 #(.CLK_MUL(2)) smc777
 	.ps2_key(ps2_key),
 	.joy0(joystick_0[5:0]),
 	.joy1(joystick_1[5:0]),
+	.mouse_en(status[6]),
+	.ps2_mouse(ps2_mouse),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index[7:0]),

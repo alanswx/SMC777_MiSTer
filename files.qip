@@ -5,6 +5,7 @@ set_global_assignment -name VHDL_FILE rtl/T80_v350/T80_Reg.vhd
 set_global_assignment -name VHDL_FILE rtl/T80_v350/T80_MCode.vhd
 set_global_assignment -name VHDL_FILE rtl/T80_v350/T80s.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777_kbd.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777_mouse.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777_fdc.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/wd1793/wd1793.sv
 set_global_assignment -name VERILOG_FILE rtl/wd1793/wd1793_mem.v

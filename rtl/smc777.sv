@@ -17,7 +17,8 @@
 //    18/19  HD46505     1A/1B  8041 keyboard (rtl/smc777_kbd.sv)    1C/1D  LS259 latch / status
 //    20     display mode (GCW)   21  vsync IRQ flag / enable   23  border colour
 //    30-33  MB8877A FDC, 34  drive select / FDC IRQ+DRQ status (rtl/smc777_fdc.sv)
-//    51     joysticks + blanking / palette select   52  palette board   53  SN76489AN
+//    51     joysticks + blanking / palette select, mouse strobe (rtl/smc777_mouse.sv)
+//    52     palette board   53  SN76489AN
 //    7E/7F  kanji ROM: JIS code hi/lo (write), pattern byte {B[4:0]} (read 7Eh)
 //    80-FF  graphics VRAM {port[6:0], B} (32 KiB)
 //============================================================================
@@ -32,6 +33,8 @@ module smc777 #(parameter CLK_MUL = 2)
 	input  [10:0] ps2_key,            // hps_io ps2_key
 	input   [5:0] joy0,               // MiSTer joystick bits: 0 right, 1 left, 2 down, 3 up, 4 button 1, 5 button 2
 	input   [5:0] joy1,
+	input         mouse_en,           // joystick port 2 has the mouse instead of joystick 2
+	input  [24:0] ps2_mouse,          // hps_io ps2_mouse
 
 	// boot.rom download (hps_io ioctl index 0): IPL ROM (SMCROM.DAT) at 0000-3FFF, kanji ROM (KANJIROM.DAT) at
 	// 4000-273FF
@@ -258,6 +261,9 @@ reg        ief_vsync, vsync_idf, irq_vsync;
 reg  [3:0] border;
 reg        vsup, sound_out, motor, cas_out;
 reg        use_pal_text, use_pal_graph;
+reg        mouse_strobe;                // 51h pin 5
+wire [3:0] mouse_nibble;
+wire [1:0] mouse_btn;
 reg  [3:0] pal_r[16], pal_g[16], pal_b[16];
 reg  [4:0] crtc_ar;                       // shadow of the HD46505 registers the renderer needs
 reg  [6:0] crtc_r10;
@@ -289,6 +295,7 @@ always @(posedge clk_sys) begin
 		border <= 4'd0;
 		{vsup, sound_out, motor, cas_out} <= 4'b0000;
 		{use_pal_text, use_pal_graph} <= 2'b00;
+		mouse_strobe <= 1'b1;
 		warm_start <= reset_warm;
 	end
 	else begin
@@ -319,7 +326,8 @@ always @(posedge clk_sys) begin
 			8'h20: gcw <= cpu_dout;
 			8'h21: ief_vsync <= cpu_dout[0];
 			8'h23: border <= cpu_dout[3:0];
-			8'h51: case (cpu_dout[2:0])
+			8'h51: case (cpu_dout[2:0])   // pin cpu_dout[2:0] <= cpu_dout[4]; 0-5: joystick port 2 outputs
+			       3'd5: mouse_strobe  <= cpu_dout[4];
 			       3'd6: use_pal_text  <= cpu_dout[4];
 			       3'd7: use_pal_graph <= cpu_dout[4];
 			       default: ;
@@ -438,13 +446,28 @@ always @(*) begin
 	8'h21: io_dout = {7'd0, vsync_idf};
 	8'h30, 8'h31, 8'h32, 8'h33, 8'h34: io_dout = fdc_dout;
 	// 51h: B bit 0 = 1 joystick #1 (5 bits), 0 joystick #2 (6 bits); active low F B L R T USER; b7 = ~blanking
-	8'h51: io_dout = {disp, 1'b0, hi[0] ? ~joy_smc(joy0) & 6'h1f : ~joy_smc(joy1)};
+	// with the mouse on port 2: b5 = ~right, b4 = ~left (the triggers), b3-0 = the nibble (SMC Paint)
+	8'h51: io_dout = hi[0]    ? {disp, 2'b00, ~joy_smc(joy0) & 6'h1f} :
+	                 mouse_en ? {disp, 1'b0, ~mouse_btn, mouse_nibble} :
+	                            {disp, 1'b0, ~joy_smc(joy1)};
 	8'h7e: io_dout = kanji_ok ? kanji_q : 8'h00;
 	default: io_dout = 8'h00;
 	endcase
 end
 
 always @(posedge clk_sys) if (io_rd) io_dout_l <= io_dout;
+
+// mouse on joystick port 2
+
+smc777_mouse #(.CLK_MUL(CLK_MUL)) mouse
+(
+	.clk_sys(clk_sys),
+	.reset(cpu_reset),
+	.ps2_mouse(ps2_mouse),
+	.strobe(mouse_strobe),
+	.nibble(mouse_nibble),
+	.buttons(mouse_btn)
+);
 
 // MiSTer joystick -> {USER, T, R, L, B, F}
 function automatic [5:0] joy_smc(input [5:0] j);

@@ -23,6 +23,8 @@ module top(
    input  [10:0] ps2_key,
    input   [5:0] joy0,
    input   [5:0] joy1,
+   input         mouse_en,
+   input  [24:0] ps2_mouse,
    input         reset_warm,
    input         border_en,
 
@@ -79,6 +81,7 @@ smc777 #(.CLK_MUL(2)) smc777        // as the MiSTer: clk_sys = 64.4476 MHz
    .border_en(border_en),
    .ps2_key(ps2_key),
    .joy0(joy0), .joy1(joy1),
+   .mouse_en(mouse_en), .ps2_mouse(ps2_mouse),
 
    .ioctl_download(ioctl_download),
    .ioctl_index(ioctl_index),

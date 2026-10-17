@@ -6,11 +6,11 @@ SN76489AN + beeper, MB8877A floppy controller with 3.5" drives, cassette.
 
 Status: verified in simulation against the Common Source Code Project (eSMC-777): the IPL, System 1.1J and its
 BASIC (keyboard, typing, programs), Choplifter, Yakyuu-Kyou and S-OS boot, with screens pixel-identical to CSP's.
-Builds in Quartus 17.0.2 and meets timing (clk_sys 64.44 MHz, +1.70 ns setup slack; 38% ALMs, 81% RAM blocks):
-`releases/SMC777_20261016.rbf`, not yet tested on hardware. See [TODO.md](TODO.md).
+SMC Paint 2.3 works with the mouse (OSD Port 2 = Mouse). Builds in Quartus 17.0.2 and meets timing (clk_sys 64.44
+MHz, +1.92 ns setup slack; 38% ALMs, 81% RAM blocks): `releases/SMC777_20261017.rbf`, not yet tested on hardware. See [TODO.md](TODO.md).
 
 - `smc777.sv` MiSTer top (hps_io, PLL, floppy slots, cassette ADC, video_mixer), `rtl/smc777.sv` the machine,
-  `rtl/smc777_kbd.sv` keyboard (8041), `rtl/smc777_fdc.sv` floppy (wd1793 with D88), `rtl/T80_v350` the CPU.
+  `rtl/smc777_kbd.sv` keyboard (8041), `rtl/smc777_mouse.sv` mouse, `rtl/smc777_fdc.sv` floppy (wd1793 with D88), `rtl/T80_v350` the CPU.
 - `verilator/` headless simulation, regression tests and the comparison with CSP: [verilator/README.md](verilator/README.md).
 
 ## Setup
@@ -31,7 +31,9 @@ Floppies: D88 images on drives A and B (S0/S1). The SMC-777 disk images found as
 - Aspect ratio, Scandoubler Fx (HQ2x, CRT scanlines; the core is 15.7 kHz, the scandoubler is used for VGA too).
 - Border: show the border colour (port 23h) around the 640x200 picture, as MAME does (CSP does not draw it).
 - Warm reset: the RESET key (port 1Ch bit 7 = 1, the IPL keeps memory); Cold reset.
-- Joysticks: port 1 and 2, two triggers. Cassette: line-in through the MiSTer ADC (I/O board / analog input).
+- Joysticks: port 1 and 2, two triggers. Port 2: Joystick or Mouse (the SMC-777 mouse on joystick port 2, for SMC
+  Paint; the MiSTer's USB/PS/2 mouse, left and right buttons).
+- Cassette: line-in through the MiSTer ADC (I/O board / analog input).
 
 ## Keyboard
 

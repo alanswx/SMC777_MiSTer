@@ -24,7 +24,7 @@ T80_SRC = $(RTL)/T80_v350/T80_ALU.vhd $(RTL)/T80_v350/T80_Reg.vhd $(RTL)/T80_v35
 	$(RTL)/T80_v350/T80.vhd $(RTL)/T80_v350/T80s.vhd
 GEN_V = $(GEN)/t80s.v
 
-V_SRC = sim.v $(RTL)/smc777.sv $(RTL)/smc777_kbd.sv $(RTL)/smc777_fdc.sv $(RTL)/wd1793/wd1793.sv $(RTL)/wd1793/wd1793_mem.v $(GEN_V) $(RTL)/mc6845v/mc6845.v $(RTL)/sn76496/sn76496.v \
+V_SRC = sim.v $(RTL)/smc777.sv $(RTL)/smc777_kbd.sv $(RTL)/smc777_mouse.sv $(RTL)/smc777_fdc.sv $(RTL)/wd1793/wd1793.sv $(RTL)/wd1793/wd1793_mem.v $(GEN_V) $(RTL)/mc6845v/mc6845.v $(RTL)/sn76496/sn76496.v \
 	$(RTL)/dpram.sv $(RTL)/spram.v
 
 V_OPT = -O3 -I$(RTL) --x-assign fast --x-initial fast --noassert --savable \
