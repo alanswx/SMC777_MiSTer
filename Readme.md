@@ -1,3 +1,40 @@
 # Sony SMC-777 for MiSTer
 
-## WIP
+The Sony SMC-777 (1983): Z80A at 4.028 MHz, 64 KiB RAM, 16 KiB IPL ROM, HD46505 CRTC with 80/40-column text and a
+programmable font (PCG), 640x200 4-colour / 320x200 16-colour graphics, the colour palette board, kanji ROM,
+SN76489AN + beeper, MB8877A floppy controller with 3.5" drives, cassette.
+
+Status: verified in simulation against the Common Source Code Project (eSMC-777): the IPL, System 1.1J and its
+BASIC (keyboard, typing, programs), Choplifter, Yakyuu-Kyou and S-OS boot, with screens pixel-identical to CSP's.
+Builds in Quartus 17.0.2 and meets timing (clk_sys 64.44 MHz, +1.70 ns setup slack; 38% ALMs, 81% RAM blocks):
+`releases/SMC777_20261016.rbf`, not yet tested on hardware. See [TODO.md](TODO.md).
+
+- `smc777.sv` MiSTer top (hps_io, PLL, floppy slots, cassette ADC, video_mixer), `rtl/smc777.sv` the machine,
+  `rtl/smc777_kbd.sv` keyboard (8041), `rtl/smc777_fdc.sv` floppy (wd1793 with D88), `rtl/T80_v350` the CPU.
+- `verilator/` headless simulation, regression tests and the comparison with CSP: [verilator/README.md](verilator/README.md).
+
+## Setup
+
+`games/SMC777/boot.rom` = `SMCROM.DAT` (16 KiB IPL ROM) followed by `KANJIROM.DAT` (144 KiB), as used by WinSMC/CSP:
+
+```
+cat SMCROM.DAT KANJIROM.DAT > boot.rom
+```
+
+Without the kanji part, everything but kanji text works.
+
+Floppies: D88 images on drives A and B (S0/S1). The SMC-777 disk images found as `.1dd` are D88 files (media byte
+30h/40h, one track per cylinder); 40-track 2D D88 images are read in the 80-track drive as on the real machine.
+
+## OSD
+
+- Aspect ratio, Scandoubler Fx (HQ2x, CRT scanlines; the core is 15.7 kHz, the scandoubler is used for VGA too).
+- Border: show the border colour (port 23h) around the 640x200 picture, as MAME does (CSP does not draw it).
+- Warm reset: the RESET key (port 1Ch bit 7 = 1, the IPL keeps memory); Cold reset.
+- Joysticks: port 1 and 2, two triggers. Cassette: line-in through the MiSTer ADC (I/O board / analog input).
+
+## Keyboard
+
+The SMC-777 keyboard is ASCII-layout, so a US PC keyboard maps by position. Shift, Ctrl, Caps Lock; the JP kana
+key or Right Alt toggles kana. F1-F5 are the programmable function keys, F11 = H (home-position key), F12 = LF,
+End = CLR, F10 or the JP yen key = RUB OUT, backtick = ` ~, backslash = \ |.

@@ -1,9 +1,11 @@
 // Copyright (c) 2010 MiSTer-X
+// SMC777_MiSTer: one clock domain. clk is the system clock, clken the chip clock (3.58/4 MHz), and
+// register writes are taken when ce & we on clk (it had a separate cpuclk domain).
 
 module SN76496
 (
 	input			     clk,
-	input				  cpuclk,
+	input				  clken,
 	input				  reset,
 	input				  ce,
 	input	 		     we,
@@ -66,7 +68,7 @@ wire [7:0]	o3 = ( fo3 & chmsk[3] ) ? { 1'b0, fv3, 1'b0 } : 8'h0;
 
 wire [8:0]	sndmix = o0 + o1 + o2 + o3;
 
-always @( posedge cpuclk or posedge reset ) begin
+always @( posedge clk or posedge reset ) begin
 	if ( reset ) begin
 		lreg <= 0;
 		_fv0 <= 0;
@@ -129,34 +131,34 @@ always @( posedge clk or posedge reset ) begin
 	else begin
 
 		// OSCs update
-		clks <= clks+3'd1;
-		if ( clks == 0 ) begin
+		if ( clken ) clks <= clks+4'd1;
+		if ( clken && clks == 0 ) begin
 
 			fv0 <= _fv0;
 			fv1 <= _fv1;
 			fv2 <= _fv2;
 			fv3 <= _fv3;
 
-			if ( fc0 == 0 ) begin
+			if ( fc0 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
 				fc0 <=  fq0;
 				fo0 <= ~fo0;
 			end
 			else fc0 <= fc0-10'd1;
 			
-			if ( fc1 == 0 ) begin
+			if ( fc1 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
 				fc1 <=  fq1;
 				fo1 <= ~fo1;
 			end
 			else fc1 <= fc1-10'd1;
 
-			if ( fc2 == 0 ) begin
+			if ( fc2 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
 				fc2 <=  fq2;
 				fo2 <= ~fo2;
 			end
 			else fc2 <= fc2-10'd1;
 
 			// NoiseGen update
-			if ( fc3 == 0 ) begin
+			if ( fc3 <= 1 ) begin
 				fc3 <= fq3;
 				rng <= { 1'b0, rng[15:1] } ^ rfb;
 			end

@@ -59,6 +59,8 @@ module mc6845
     output VSYNC,
     output HSYNC,
     output reg DE,
+    output reg HDE,         // horizontal display, with the same R8 skew as DE (for HBlank)
+    output VDE,             // vertical display (for VBlank)
     output reg CURSOR,
     input LPSTB,
 
@@ -113,8 +115,8 @@ reg [4:0] field_counter;            // Field counter counts number of complete f
 reg h_display;                    // Horizontal display signal
 reg hs;                           // HSYNC signal
 reg v_display;                    // Vertical display signal
-reg vs;                           // VSYNC signal
-reg vs_hit;                       // Vertical sync hit signal
+wire vs;                           // VSYNC signal
+wire vs_hit;                       // Vertical sync hit signal
 reg vs_hit_last;                  // Vertical sync hit last signal
 reg vs_even;                      // Vertical sync even signal
 reg vs_odd;                       // Vertical sync odd signal
@@ -122,9 +124,10 @@ reg odd_field;                    // Indicates the current field is an odd field
 reg [13:0] ma_i;                  // Memory address input
 reg cursor_i;                     // Cursor signal input
 reg [3:0] lpstb_sync;             // LPSTB sync signal
-reg de0;                          // DE signal 0
+wire de0;                         // DE signal 0
 reg de1;                          // DE signal 1
 reg de2;                          // DE signal 2
+reg hde1, hde2;                   // skewed horizontal display
 reg cursor0;                      // Cursor signal 0
 reg cursor1;                      // Cursor signal 1
 reg cursor2;                      // Cursor signal 2
@@ -302,17 +305,18 @@ end
     // Changing R3 during HSYNC does extend (or overflow) HSYNC
     // multiple HSYNCs can happen on a line, but there will be a gap between them
     // R3=0 => no HSYNC
+// (a duplicate of the h_counter process stood here in the original port, instead of the HSYNC counter below)
+
+    // HSYNC width counter (lost in the VHDL -> Verilog port; restored from mc6845.vhd): counts characters while
+    // HSYNC is high, R3 low nibble = width, 0 = no HSYNC
 always @(posedge CLOCK or negedge nRESET) begin
-    if (nRESET == 1'b0) begin
-        h_counter <= 8'b0;
-    end 
-    else begin
-        if (CLKEN) begin
-            if (r00_h_total_hit) 
-                h_counter <= 8'b0;
-            else 
-                h_counter <= h_counter + 1;
-        end
+    if (nRESET == 1'b0)
+        h_sync_counter <= 4'h0;
+    else if (CLKEN) begin
+        if (hs == 1'b0)
+            h_sync_counter <= 4'h0;
+        else
+            h_sync_counter <= h_sync_counter + 1'd1;
     end
 end
 
@@ -378,7 +382,7 @@ end
 
 always @* begin
     if (max_scanline_hit)
-        line_counter_next <= '0; // assuming line_counter_next is of appropriate width
+        line_counter_next <= 5'd0; // assuming line_counter_next is of appropriate width
     else if (adj_in_progress || ~((r08_interlace[1:0] == 2'b11) && (VGA == 1'b0)))
         line_counter_next <= line_counter + 1;
     else begin
@@ -727,6 +731,8 @@ always @(posedge CLOCK) begin
     if (CLKEN == 1'b1) begin
         de1 <= de0;
         de2 <= de1;
+        hde1 <= h_display;
+        hde2 <= hde1;
         cursor1 <= cursor0;
         cursor2 <= cursor1;
     end
@@ -740,7 +746,14 @@ always @* begin
         2'b10: DE = de2;
         default: DE = de0;
     endcase
+    case (r08_interlace[5:4])
+        2'b01: HDE = hde1;
+        2'b10: HDE = hde2;
+        default: HDE = h_display;
+    endcase
 end
+
+assign VDE = v_display;
 
 
 always @* begin
