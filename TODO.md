@@ -1,18 +1,19 @@
 # SMC-777 MiSTer core: status and remaining work
 
-Status 2026-10-17: verified in simulation against CSP (eSMC-777); mouse added (SMC Paint). Quartus 17.0.2 build
-(misterubuntu): fits (15,935 ALMs 38%, 449/553 RAM blocks 81%, 3.56 Mbit), timing met (slow 85C model: core PLL
-64.44 MHz +1.924 ns setup, +0.247 ns hold, TNS 0 on all clocks). releases/SMC777_20261017.rbf. Not yet run on a
-MiSTer.
+Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer (mister126, below); mouse added
+(SMC Paint). Quartus 17.0.2 build (misterubuntu): fits (16,081 ALMs 38%, 450/553 RAM blocks 81%), timing met (slow
+85C model: core PLL 64.44 MHz +2.889 ns setup, +0.253 ns hold, TNS 0 on all clocks). releases/SMC777_20261017.rbf.
 
 ## Done (simulation, compared with CSP)
 
 1. Floppy: MB8877A at 30h-34h (`rtl/smc777_fdc.sv`, wd1793 with D88), two drives on the MiSTer slots. 1DD media
    (one track per cylinder) and 2D media in the 80-track drive (head/2, odd tracks unformatted) as CSP's DISK.
    System 1.1J menu, Yakyuu-Kyou title, S-OS 2.2: pixel-identical.
-2. Keyboard: 8041 key encoder (`rtl/smc777_kbd.sv`): per-frame scan in CSP's table order, shift/ctrl/caps/kana,
-   repeat, programmable F1-F5/H, keyboard IRQ. PS/2 (US layout) table generated from CSP's (`tools/gen_kbd_table.py`).
-   System menu cursor keys, BASIC typing and RUN work.
+2. Keyboard: 8041 key encoder (`rtl/smc777_kbd.sv`): shift/ctrl/caps/kana, repeat, programmable F1-F5/H, keyboard
+   IRQ. PS/2 (US layout) table generated from CSP's (`tools/gen_kbd_table.py`). Unlike CSP (first held key in table
+   order once a frame), presses queue in order with their shift/ctrl state and go out once a frame after the CPU has
+   read the last code: on hardware, typing through MiSTerKVMS lost and reordered keys before. Right Alt toggles kana
+   only when tapped alone (a KVM's Cmd+Option+Esc escape had turned kana on).
 3. Video: 80/40-column text (both 40-column pages), attributes, cursor, 640x200 (both colour sets) and 320x200,
    colour generator and palette board, vsup, kanji ROM (7Eh/7Fh, reads identical to CSP), optional border (MAME
    style). MiSTer: video_mixer with scandoubler/HQ2x/scanlines.
@@ -26,10 +27,20 @@ MiSTer.
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## Hardware (mister126, 2026-10-17, HDMI through MiSTerKVMS)
+
+Native screenshots compared at each core pixel: System 1.1J menu, Yakyuu-Kyou title and S-OS 2.2 identical to CSP;
+SMC Paint's mouse-drawn line identical to the sim. Floppy boots (MGL mounts), keyboard (BASIC typing at the KVM's
+default 50 ms per key), mouse (moves, clicks, Line tool), PSG tone (717.7 Hz) and the IPL beep (210 ms) on HDMI
+audio, Choplifter and Lode Runner run.
+
+READ TRACK ($E0) added to the wd1793 for D88 images (a track synthesised as CSP's make_track): Lode Runner's loader
+checks an ID with H = $AA and the gap after it, and hung at a black screen without it.
+
 ## Remaining
 
-- Hardware test of the release: HDMI, analog 15 kHz, scandoubler, floppies (D88 mounts), keyboard, ADC cassette.
-  RAM blocks are at 81%: room is limited if more BRAM is added (e.g. a third drive or bigger track buffers).
+- Hardware not yet tried: analog 15 kHz output, the scandoubler/HQ2x options, two drives at once, disk writes, the
+  ADC cassette, joysticks. RAM blocks are at 81%: room is limited if more BRAM is added.
 - Quartus fixes made for 17.0 (Verilator accepted them): function-result bit selects in smc777_kbd, `'0` and regs
   driven by assign in mc6845.v, and the port's duplicated h_counter process (where the HSYNC counter belonged).
 - Floppy timing: no rotational latency (boots faster than CSP); fine for software seen so far. Disk writes verified:

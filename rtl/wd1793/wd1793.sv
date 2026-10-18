@@ -250,6 +250,10 @@ typedef enum
 
 	STATE_ABORT,
 	STATE_WAIT,
+	STATE_RT_SEARCH,     // LOCAL ADDITION (SMC777): READ TRACK, see below
+	STATE_RT_BYTE,
+	STATE_RT_1,
+	STATE_RT_2,
 	STATE_WAIT_2,
 	STATE_ENDCOMMAND
 } io_state_t;
@@ -304,12 +308,24 @@ wire  [7:0] wdreg_status = cmd_mode == 0 ?
 
 reg   [7:0] read_addr[6];
 reg   [7:0] q;
+
+// LOCAL ADDITION (SMC777): READ TRACK ($E0) for sector-container images (D88/EDSK). The track is synthesised from
+// the sector table as CSP's DISK::make_track does: preamble (gap 4E x80, sync, index mark C2 C2 C2 FC, gap 4E x50),
+// then per sector: sync 00 x12, A1 A1 A1 FE, C H R N, ID CRC, gap2 4E x22, sync, A1 A1 A1 FB, the data (read from the
+// image), data CRC, gap3 4E x54; then 4E x100 and the command ends. Lode Runner's loader reads the track and checks
+// the ID of a sector with H = $AA and the length of the gap after it (protection); before this it retried for ever.
+reg         rt;                    // READ TRACK in progress
+reg   [4:0] rt_ph;                 // field (below)
+reg  [10:0] rt_cnt;                // bytes left in this field
+reg  [15:0] rt_crc;                // data field CRC
+reg   [7:0] rt_q;                  // the byte offered to the CPU
+reg         rt_more;               // another sector table entry follows
 always @* begin
 	case (addr)
 		A_STATUS: q = wdreg_status;
 		A_TRACK:  q = wdreg_track;
 		A_SECTOR: q = wdreg_sector;
-		A_DATA:   q = (state == STATE_IDLE) ? wdreg_data : buff_rd ? (RWMODE ? buff_dout : buff_din) : read_addr[byte_addr[2:0]];
+		A_DATA:   q = (state == STATE_IDLE) ? wdreg_data : rt ? rt_q : buff_rd ? (RWMODE ? buff_dout : buff_din) : read_addr[byte_addr[2:0]];
 	endcase
 end
 
@@ -426,6 +442,46 @@ endfunction
 wire [15:0] id_crc = crc16_ccitt(crc16_ccitt(crc16_ccitt(crc16_ccitt(
 	                     ID_CRC_SEED, edsk_trackf), edsk_sidef), edsk_sector), edsk_sizecode);
 
+localparam [15:0] DATA_CRC_SEED = 16'hE295;  // CRC-16-CCITT of $A1 $A1 $A1 $FB
+
+wire rt_match = (edsk_track == img_track) & ~img_odd & (edsk_side == side);
+
+reg [7:0] rt_byte;
+always @* begin
+	case (rt_ph)
+		5'd1, 5'd5, 5'd15: rt_byte = 8'h00;
+		5'd2:              rt_byte = 8'hC2;
+		5'd3:              rt_byte = 8'hFC;
+		5'd6, 5'd16:       rt_byte = 8'hA1;
+		5'd7:              rt_byte = 8'hFE;
+		5'd8:              rt_byte = edsk_trackf;
+		5'd9:              rt_byte = edsk_sidef;
+		5'd10:             rt_byte = edsk_sector;
+		5'd11:             rt_byte = {6'd0, edsk_sizecode};
+		5'd12:             rt_byte = id_crc[15:8];
+		5'd13:             rt_byte = id_crc[7:0];
+		5'd17:             rt_byte = 8'hFB;
+		5'd18:             rt_byte = buff_dout;
+		5'd19:             rt_byte = rt_crc[15:8];
+		5'd20:             rt_byte = rt_crc[7:0];
+		default:           rt_byte = 8'h4E;    // gaps: 0, 4, 14, 21, 22
+	endcase
+end
+
+reg [10:0] rt_len;                 // the length of field rt_ph + 1
+always @* begin
+	case (rt_ph + 1'd1)
+		5'd1, 5'd5, 5'd15: rt_len = 11'd12;
+		5'd2, 5'd6, 5'd16: rt_len = 11'd3;
+		5'd4:              rt_len = 11'd50;
+		5'd14:             rt_len = 11'd22;
+		5'd18:             rt_len = sector_size;
+		5'd21:             rt_len = 11'd54;
+		5'd22:             rt_len = 11'd100;
+		default:           rt_len = 11'd1;
+	endcase
+end
+
 wire        rde = rd & io_en;
 wire        wre = wr & io_en;
 always @(posedge clk_sys) begin
@@ -524,6 +580,7 @@ always @(posedge clk_sys) begin
 		seektimer <= 'h3FF;
 		{ack, sd_wr, sd_rd, sd_busy} <= 0;
 		ra_sector <= 1;
+		rt <= 0;
 	end else if(ce) begin
 
 		ack <= {ack[4:0], sd_ack};
@@ -687,7 +744,7 @@ always @(posedge clk_sys) begin
 				begin
 					if(!sd_busy) begin
 						sd_block <= sd_block + 1'd1;
-						state <= write ? STATE_WRITE : STATE_READ;
+						state <= rt ? STATE_RT_BYTE : write ? STATE_WRITE : STATE_READ;
 						if(sd_block < blk_max) state <= STATE_WAIT_READ_1;
 					end
 				end
@@ -836,6 +893,72 @@ always @(posedge clk_sys) begin
 					end
 				end
 
+			// LOCAL ADDITION (SMC777): READ TRACK, see rt above
+			STATE_RT_SEARCH:
+				begin
+					if(!ready) state <= STATE_ENDCOMMAND;
+					else if(rt_match) begin
+						rt_ph  <= 5'd0;
+						rt_cnt <= 11'd80;
+						state  <= STATE_RT_BYTE;
+					end
+					else if(edsk_next == 0) begin
+						s_seekerr <= 1;                 // no sector on this track
+						state <= STATE_ENDCOMMAND;
+					end
+					else edsk_addr <= edsk_next;
+				end
+			STATE_RT_BYTE:
+				begin
+					watchdog_set <= 1;
+					read_timer <= 15;
+					state <= STATE_RT_1;
+				end
+			STATE_RT_1:
+				begin
+					read_timer <= read_timer - 1'b1;
+					if(!read_timer) begin
+						read_data <= 0;
+						watchdog_set <= 0;
+						s_lostdata <= 0;
+						rt_q <= rt_byte;
+						s_drq_busy <= 2'b11;
+						state <= STATE_RT_2;
+					end
+				end
+			STATE_RT_2:
+				if(watchdog_bark | (read_data & s_drq)) begin
+					s_drq_busy <= 2'b01;
+					s_lostdata <= watchdog_bark;
+					if(read_data & s_drq) wdreg_data <= rt_q;
+					if(rt_ph == 5'd18) begin
+						rt_crc <= crc16_ccitt(rt_crc, rt_q);
+						byte_addr <= byte_addr + 1'd1;
+					end
+					state <= STATE_RT_BYTE;
+					if(rt_cnt != 11'd1) rt_cnt <= rt_cnt - 1'd1;
+					else begin
+						rt_ph  <= rt_ph + 1'd1;
+						rt_cnt <= rt_len;
+						case (rt_ph)
+							5'd17: begin                   // load the sector data, then on to it
+								rt_crc <= DATA_CRC_SEED;
+								state  <= STATE_WAIT_READ;
+							end
+							5'd20: begin                   // gap 3: step to the next table entry meanwhile
+								rt_more   <= edsk_next != 0;
+								edsk_addr <= edsk_next;
+							end
+							5'd21: if(rt_more & rt_match) begin
+								rt_ph  <= 5'd5;
+								rt_cnt <= 11'd12;
+							end
+							5'd22: state <= STATE_ENDCOMMAND;
+							default: ;
+						endcase
+					end
+				end
+
 			// Abort current operation ($D0)
 			STATE_ABORT:
 				begin
@@ -876,6 +999,7 @@ always @(posedge clk_sys) begin
 			// End any command.
 			STATE_ENDCOMMAND:
 				begin
+					rt      <= 0;
 					format  <= 0;
 					buff_rd <= 0;
 					if(RWMODE) buff_wr <=0;
@@ -1106,9 +1230,21 @@ always @(posedge clk_sys) begin
 							'hE:	// READ TRACK
 								begin
 									{s_wrfault,s_crcerr,s_lostdata} <= 0;
-									s_seekerr  <= 1;
 									s_drq_busy <= 2'b01;
-									state <= STATE_WAIT;
+									if(RWMODE && EDSK && var_size) begin   // LOCAL ADDITION (SMC777): see rt
+										s_seekerr <= 0;
+										{write,buff_rd} <= 0;
+										if(RWMODE) buff_wr <= 0;
+										format      <= 0;
+										multisector <= 0;
+										read_data   <= 0;
+										rt          <= 1;
+										edsk_addr   <= 0;
+										state       <= STATE_RT_SEARCH;
+									end else begin
+										s_seekerr  <= 1;
+										state <= STATE_WAIT;
+									end
 								end
 							endcase
 						end

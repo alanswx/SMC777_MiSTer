@@ -36,7 +36,7 @@ static const double CLK_HZ = 32223800.0;   // clk_sys = the 32.2238 MHz master c
 static const double CLK_HZ = 64447600.0;   // clk_sys = 2 x the master clock, as the MiSTer
 #endif
 
-struct TypeCmd { uint32_t frame; std::string text; };
+struct TypeCmd { uint32_t frame; std::string text; bool burst; };
 
 struct Options {
     uint32_t    stop_frame = 60;
@@ -86,7 +86,8 @@ static void usage()
 "  --mouse-move F:DX:DY[:B]  move the mouse DX right, DY down from frame F (PS/2 packets, one per ms); buttons B\n"
 "                         (1 left, 2 right) from then on\n"
 "  --reset-at F           cold reset before frame F; --warm-reset-at F: warm reset (RESET key, port 1Ch bit 7)\n"
-"  --type-rate P:R        frames per key press:release (default 4:4)\n"
+"  --type-burst F:TEXT    type TEXT with every press and release in frame F (1 ms apart: at most 15 keys)\n"
+"  --type-rate P:R        frames per key press:release (default 4:4; P = 0: press and release 1 ms apart)\n"
 "  --screenshot N         PNG of frame N (repeatable)\n"
 "  --dump-frames A:B      PNG of every frame A..B\n"
 "  --dump-every K         PNG of every Kth frame\n"
@@ -130,7 +131,8 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--headless") {}
         else if (a == "--stop-at-frame") o.stop_frame = parse_num(next());
         else if (a == "--quiet") o.quiet = true;
-        else if (a == "--type") { uint32_t f; if (!pair("FRAME:TEXT", f, rest)) return false; o.types.push_back({f, rest}); }
+        else if (a == "--type") { uint32_t f; if (!pair("FRAME:TEXT", f, rest)) return false; o.types.push_back({f, rest, false}); }
+        else if (a == "--type-burst") { uint32_t f; if (!pair("FRAME:TEXT", f, rest)) return false; o.types.push_back({f, rest, true}); }
         else if (a == "--type-rate") { if (!pair("P:R", o.type_press, rest)) return false; o.type_release = parse_num(rest); }
         else if (a == "--screenshot") o.screenshots.insert(parse_num(next()));
         else if (a == "--dump-frames") { if (!pair("A:B", o.dump_from, rest)) return false; o.dump_to = parse_num(rest); o.dump_range = true; }
@@ -563,6 +565,7 @@ void Sim::schedule_typing()
 {
     for (auto &t : opt.types) {
         uint32_t f = t.frame;
+        uint32_t press = t.burst ? 0 : opt.type_press, release = t.burst ? 0 : opt.type_release;
         const std::string &s = t.text;
         for (size_t i = 0; i < s.size(); i++) {
             Ps2Key k;
@@ -575,6 +578,12 @@ void Sim::schedule_typing()
                 std::string name = s.substr(i + 1, e - i - 1);
                 i = e;
                 if (name.rfind("WAIT", 0) == 0) { f += parse_num(name.substr(4)); continue; }
+                if (name[0] == '+' || name[0] == '-') {   // {+NAME} press only, {-NAME} release only (chords)
+                    if (!ps2_from_name(name.substr(1), k)) { fprintf(stderr, "--type: unknown key {%s}\n", name.c_str()); continue; }
+                    ps2_schedule.insert({f, {k.code, k.extended, name[0] == '+'}});
+                    f += 1;
+                    continue;
+                }
                 ok = ps2_from_name(name, k);
                 if (!ok) fprintf(stderr, "--type: unknown key {%s}\n", name.c_str());
             } else {
@@ -584,9 +593,9 @@ void Sim::schedule_typing()
             if (!ok) continue;
             if (k.shift) ps2_schedule.insert({f, {PS2_LSHIFT, false, true}});
             ps2_schedule.insert({f, {k.code, k.extended, true}});
-            ps2_schedule.insert({f + opt.type_press, {k.code, k.extended, false}});
-            if (k.shift) ps2_schedule.insert({f + opt.type_press, {PS2_LSHIFT, false, false}});
-            f += opt.type_press + opt.type_release;
+            ps2_schedule.insert({f + press, {k.code, k.extended, false}});
+            if (k.shift) ps2_schedule.insert({f + press, {PS2_LSHIFT, false, false}});
+            f += press + release;
         }
     }
 }

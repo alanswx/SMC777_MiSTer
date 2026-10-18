@@ -17,9 +17,14 @@
 # They run on the fast build (make fast; same frames, half the clk_sys) and take several minutes each, in parallel:
 #   sys11_menu     System 1.1J boots to its file menu; frame 300 equals CSP's (palette board, PCG font)
 #   basic_typing   System 1.1J -> BASIC (cursor keys, RETURN), types a program and RUNs it: frame hash
+#   basic_taps     the same with every key tapped for 1 ms (shift too), 15 keys/s, then 14 keys inside one frame
+#                  (--type-burst): presses wait in order for the keyboard scan (once a frame), none lost or reordered;
+#                  then Right Alt: in a combination (a KVM's escape keys) it leaves kana alone, tapped it toggles kana
 #   yakyuukyou     Yakyuu-Kyou (2D D88 in the 80-track drive, 640x200 colour set 2): title equals CSP's
 #   sos22          S-OS 2.2 (80 columns): frame 1800 equals CSP's
 #   choplifter     Choplifter (320x200 16 colours): frame 1500 hash
+#   lode_runner    Lode Runner: its loader READ TRACKs (copy protection: an ID with H = $AA and the gap after it),
+#                  then title and attract mode: frame 1500 hash
 #   smc_paint      SMC Paint 2.3 with the mouse: click the Line tool, click two points: frame 1140 hash (a line from
 #                  60,60 to 200,150, "LINE 200,150")
 #
@@ -66,11 +71,17 @@ if [ -n "$GAMES" ]; then
     runf basic_typing --fdd "$SW/sys11j/system 11.1dd" --fdd-readonly --type '310:{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}' \
         --type '390:\n' --type-rate 3:3 --type '805:print "Hello, World!";3*4+1;hex$(43981)\n10 FOR I=1 TO 3:PRINT I*I;:NEXT\nRUN\n' \
         --stop-at-frame 1300 --screenshot 1300 --double-lines --frame-log "$OUT/basic_typing.csv"
+    runf basic_taps --fdd "$SW/sys11j/system 11.1dd" --fdd-readonly --type '310:{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}{DOWN}' \
+        --type '390:\n' --type-rate 0:4 --type '805:print "Hello, World!";3*4+1;hex$(43981)\n10 FOR I=1 TO 3:PRINT I*I;:NEXT\nRUN\n' \
+        --type-burst '1150:?"Ab";hex$(9)\n' --type '1170:{+RGUI}{+RALT}{ESC}{-RALT}{-RGUI}abc\n{RALT}abc\n{RALT}abc\n' \
+        --stop-at-frame 1300 --screenshot 1300 --double-lines --frame-log "$OUT/basic_taps.csv"
     runf yakyuukyou --fdd "$SW/yakyuuky/yakyuu-kyou (smc-777) [fd].d88" --fdd-readonly --stop-at-frame 1500 --screenshot 1500 --double-lines
     runf sos22 --fdd "$SW/sos22/s-os sword monitor 2.2.1dd" --fdd-readonly --stop-at-frame 1800 --screenshot 1800 --double-lines
     runf choplifter --fdd "$SW/choplift/choplifter.1dd" --fdd-readonly --stop-at-frame 1500 --screenshot 1500 --double-lines \
         --frame-log "$OUT/choplifter.csv"
     SW2="../software/extracted/Sony SMC-777/Sony SMC-777"
+    runf lode_runner --fdd "$SW2/Lode Runner (1984)(Broderbund Software)(Sony)(Douglas Smith).1DD" --fdd-readonly \
+        --stop-at-frame 1500 --screenshot 1500 --double-lines --frame-log "$OUT/lode_runner.csv"
     runf smc_paint --fdd "$SW2/SMC_PAINT23.1DD" --fdd-readonly --mouse-move 1005:88:10 --mouse-move 1020:0:0:1 \
         --mouse-move 1025:0:0:0 --mouse-move 1050:-28:50 --mouse-move 1070:0:0:1 --mouse-move 1075:0:0:0 \
         --mouse-move 1085:140:90 --mouse-move 1105:0:0:1 --mouse-move 1110:0:0:0 \
@@ -135,8 +146,10 @@ if [ -n "$GAMES" ]; then
     vs_csp yakyuukyou 1500 csp_yakyuukyou_title_f1800.png
     vs_csp sos22 1800 csp_sos22_f1800.png
     check basic_typing "$(hash_at "$OUT/basic_typing.csv" 1300)"
+    check basic_taps "$(hash_at "$OUT/basic_taps.csv" 1300)"
     check choplifter "$(hash_at "$OUT/choplifter.csv" 1500)"
     check smc_paint "$(hash_at "$OUT/smc_paint.csv" 1140)"
+    check lode_runner "$(hash_at "$OUT/lode_runner.csv" 1500)"
 fi
 
 exit $fail

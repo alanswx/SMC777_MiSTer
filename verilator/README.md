@@ -42,8 +42,11 @@ speed. The default build is the MiSTer configuration.
   --trace-io FILE        frame,cpu_cycle,pc,kind,address,data for each IN/OUT (the CSP CLI's columns)
   --trace-from/--trace-to N
   --fdd FILE             D88/.1dd image in drive A; --fdd-b FILE drive B; --fdd-readonly
-  --type FRAME:TEXT      PS/2 typing (US layout; capitals with shift); --type-rate P:R (default 4:4)
+  --type FRAME:TEXT      PS/2 typing (US layout; capitals with shift); --type-rate P:R frames pressed:released
+                         (default 4:4; P = 0: press and release 1 ms apart); --type-burst F:TEXT: all of TEXT
+                         inside frame F (events 1 ms apart, up to 15 keys)
                          {RETURN} {ESC} {BS} {DEL} {INS} {HOME} {CLR} {RUBOUT} {LF} {H} {BREAK} arrows {F1}-{F5} {WAITn}
+                         {KANA} {RALT} {RGUI} {CTRL} {SHIFT}; {+NAME} / {-NAME} press / release only (a frame each)
   --joy F:PORT:BITS      joystick state from frame F (MiSTer bits: 1 right 2 left 4 down 8 up 16/32 triggers)
   --mouse                the mouse on joystick port 2 (OSD option); --mouse-move F:DX:DY[:B] moves it DX right and
                          DY down from frame F (PS/2 packets of up to 100, one per ms), buttons B (1 left, 2 right)
@@ -76,9 +79,11 @@ the expected files (check the PNGs first).
 | `mouse` | `tests/roms/make_mouse_test.py` as the IPL reads the mouse as SMC Paint does; with `--mouse-move` the decoded movement and buttons must match (CSP has no mouse) |
 | `sys11_menu_vs_csp` (GAMES=1) | System 1.1J's menu at frame 300 equals CSP's |
 | `basic_typing` (GAMES=1) | System 1.1J -> BASIC with the cursor keys, a typed PRINT/hex$ and a FOR loop program, RUN |
+| `basic_taps` (GAMES=1) | the same typed with 1 ms key taps (shift too) at 15 keys/s, then 14 keys in one frame: none lost or reordered |
 | `yakyuukyou_vs_csp` (GAMES=1) | Yakyuu-Kyou (2D D88, 640x200 colour set 2) title equals CSP's |
 | `sos22_vs_csp` (GAMES=1) | S-OS 2.2 (80 columns) at frame 1800 equals CSP's |
 | `choplifter` (GAMES=1) | Choplifter (320x200 16 colours, animated attract) frame 1500 hash |
+| `lode_runner` (GAMES=1) | Lode Runner: READ TRACK (its copy protection), title, attract mode at frame 1500 |
 | `smc_paint` (GAMES=1) | SMC Paint 2.3 with the mouse: select Line, click two points; frame 1140 hash |
 
 `GAMES=1` tests use the disks in `../software/extracted/` (not in the repository; `smc777/` and `Sony SMC-777/`
