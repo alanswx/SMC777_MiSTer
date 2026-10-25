@@ -46,7 +46,7 @@ reg  [3:0]	clks;
 
 reg  [2:0]	nzc;
 reg  [9:0]	fq0, fq1, fq2;
-reg  [9:0]	fc0, fc1, fc2;
+reg  [10:0]	fc0, fc1, fc2;
 reg  [5:0]	fv0, fv1, fv2, fv3;
 reg  [5:0] _fv0,_fv1,_fv2,_fv3;
 reg			fo0, fo1, fo2;
@@ -54,19 +54,27 @@ reg			fo0, fo1, fo2;
 reg  [15:0] rng = `RNGINI;
 wire [15:0] rfb = rng[0] ? ( nzc[2] ? `RNGFB1 : `RNGFB0 ) : 16'h0;
 
+// Period 0 is 1024 (0x400) on TI SN76489/SN76489A (MAME sn76496.cpp, CSP sn76489an.cpp)
+wire [10:0] p0 = ( fq0 == 10'd0 ) ? 11'd1024 : { 1'b0, fq0 };
+wire [10:0] p1 = ( fq1 == 10'd0 ) ? 11'd1024 : { 1'b0, fq1 };
+wire [10:0] p2 = ( fq2 == 10'd0 ) ? 11'd1024 : { 1'b0, fq2 };
+
+// TI SN76489A datasheet Table 3: noise shift rate is N/512, N/1024, N/2048, or Tone 2 output N/(32*p2).
+// Since the counters tick at N/16 (clks == 0), the periods in N/16 ticks are 32, 64, 128, and 2*p2.
 wire  [1:0] nfq = nzc[1:0];
-wire [10:0] fq3 = ( nfq == 2'b00 ) ? 11'd64  :
-				 	   ( nfq == 2'b01 ) ? 11'd128 :
-					   ( nfq == 2'b10 ) ? 11'd256 : fq2;
-reg  [10:0] fc3;
+wire [11:0] fq3 = ( nfq == 2'b00 ) ? 12'd32  :
+				 	   ( nfq == 2'b01 ) ? 12'd64  :
+					   ( nfq == 2'b10 ) ? 12'd128 : { p2, 1'b0 };
+reg  [11:0] fc3;
 wire			fo3 = rng[0];
 
-wire [7:0]	o0 = ( fo0 & chmsk[0] ) ? { 1'b0, fv0, 1'b0 } : 8'h0;
-wire [7:0]	o1 = ( fo1 & chmsk[1] ) ? { 1'b0, fv1, 1'b0 } : 8'h0;
-wire [7:0]	o2 = ( fo2 & chmsk[2] ) ? { 1'b0, fv2, 1'b0 } : 8'h0;
-wire [7:0]	o3 = ( fo3 & chmsk[3] ) ? { 1'b0, fv3, 1'b0 } : 8'h0;
+// 4 channels x 0..63 = 0..252 (fits in 8 bits without clipping)
+wire [7:0]	o0 = ( fo0 & chmsk[0] ) ? { 2'b00, fv0 } : 8'h0;
+wire [7:0]	o1 = ( fo1 & chmsk[1] ) ? { 2'b00, fv1 } : 8'h0;
+wire [7:0]	o2 = ( fo2 & chmsk[2] ) ? { 2'b00, fv2 } : 8'h0;
+wire [7:0]	o3 = ( fo3 & chmsk[3] ) ? { 2'b00, fv3 } : 8'h0;
 
-wire [8:0]	sndmix = o0 + o1 + o2 + o3;
+wire [7:0]	sndmix = o0 + o1 + o2 + o3;
 
 always @( posedge clk or posedge reset ) begin
 	if ( reset ) begin
@@ -131,6 +139,7 @@ always @( posedge clk or posedge reset ) begin
 	else begin
 
 		// OSCs update
+		if ( ce && we && data[7] && data[6:4] == 3'h6 ) rng <= `RNGINI;
 		if ( clken ) clks <= clks+4'd1;
 		if ( clken && clks == 0 ) begin
 
@@ -139,33 +148,33 @@ always @( posedge clk or posedge reset ) begin
 			fv2 <= _fv2;
 			fv3 <= _fv3;
 
-			if ( fc0 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
-				fc0 <=  fq0;
+			if ( fc0 <= 1 ) begin	// period N (0 -> 1024), as the SN76489A and CSP
+				fc0 <=  p0;
 				fo0 <= ~fo0;
 			end
-			else fc0 <= fc0-10'd1;
+			else fc0 <= fc0-11'd1;
 			
-			if ( fc1 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
-				fc1 <=  fq1;
+			if ( fc1 <= 1 ) begin	// period N (0 -> 1024), as the SN76489A and CSP
+				fc1 <=  p1;
 				fo1 <= ~fo1;
 			end
-			else fc1 <= fc1-10'd1;
+			else fc1 <= fc1-11'd1;
 
-			if ( fc2 <= 1 ) begin	// period N (was N+1), as the SN76489 and CSP
-				fc2 <=  fq2;
+			if ( fc2 <= 1 ) begin	// period N (0 -> 1024), as the SN76489A and CSP
+				fc2 <=  p2;
 				fo2 <= ~fo2;
 			end
-			else fc2 <= fc2-10'd1;
+			else fc2 <= fc2-11'd1;
 
 			// NoiseGen update
 			if ( fc3 <= 1 ) begin
 				fc3 <= fq3;
 				rng <= { 1'b0, rng[15:1] } ^ rfb;
 			end
-			else fc3 <= fc3-11'd1;
+			else fc3 <= fc3-12'd1;
 
 			// Sound update
-			sndout <= {8{sndmix[8]}}|(sndmix[7:0]);
+			sndout <= sndmix;
 
 		end
 

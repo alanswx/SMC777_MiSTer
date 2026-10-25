@@ -27,6 +27,8 @@ module top(
    input  [24:0] ps2_mouse,
    input         reset_warm,
    input         border_en,
+   input         tape_in,
+   output        tape_motor,
 
    // floppy image slots (hps_io sd_* bus), flattened for the C++ harness
    input   [1:0] img_mounted,
@@ -97,7 +99,7 @@ smc777 #(.CLK_MUL(2)) smc777        // as the MiSTer: clk_sys = 64.4476 MHz
    .audio_l(AUDIO_L),
    .audio_r(AUDIO_R),
 
-   .tape_in(1'b0), .tape_motor(), .tape_out(),
+   .tape_in(tape_in), .tape_motor(tape_motor), .tape_out(),
 
    .img_mounted(img_mounted), .img_readonly(img_readonly), .img_size(img_size),
    .sd_lba(fdd_lba), .sd_rd(fdd_rd), .sd_wr(fdd_wr), .sd_ack(fdd_ack),

@@ -46,3 +46,4 @@ verilator/ghdl_work/
 # local software library (ROMs/disks; not redistributable)
 software/
 __pycache__/
+docs/

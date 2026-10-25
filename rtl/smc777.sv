@@ -682,8 +682,8 @@ SN76496 psg
 	.lreg()
 );
 
-// Signed output (AUDIO_S = 1): the PSG (0-255 summed channels), beeper and cassette monitor as levels
-wire [15:0] mix = {2'b00, psg_out, 6'd0} + (sound_out ? 16'h1800 : 16'h0000) + ((motor && (cas_out ^ tape_in)) ? 16'h0400 : 16'h0000);
+// Signed output (AUDIO_S = 1): the PSG (0-252 summed channels, 6048/ch max), beeper (6144) and cassette monitor
+wire [15:0] mix = {2'b00, psg_out, 6'd0} + {3'b000, psg_out, 5'd0} + (sound_out ? 16'h1800 : 16'h0000) + ((motor && (cas_out ^ tape_in)) ? 16'h0400 : 16'h0000);
 assign audio_l = mix;
 assign audio_r = mix;
 

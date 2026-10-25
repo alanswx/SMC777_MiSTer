@@ -42,3 +42,18 @@ The SMC-777 keyboard is ASCII-layout, so a US PC keyboard maps by position. Shif
 key, or Right Alt tapped on its own, toggles kana (Right Alt as part of a combination, such as a KVM's escape keys,
 does not). F1-F5 are the programmable function keys, F11 = H (home-position key), F12 = LF,
 End = CLR, F10 or the JP yen key = RUB OUT, backtick = ` ~, backslash = \ |.
+
+## Cassette
+
+Line-in through the MiSTer ADC. In System 1.1J BASIC: `CLOAD "NAME"`, then play the tape; the motor relay (port 1Ch)
+is the cue. The format (System 1.1J BASIC, F59Eh-F6ABh): a ~726 Hz leader, then bytes of a start cycle, 8 bits MSB
+first (0 ~1600 Hz, 1 ~1200 Hz cycles) and a stop cycle; a 32-byte header block (type, 8+3 name, ...) and 128-byte
+data blocks, each with an XOR checksum. BASIC's bit threshold leaves only a few percent of margin for tape speed.
+
+## Tools
+
+- `tools/smc777_tape.py WAV` finds SMC-777 files on a tape recording, `--dump DIR` extracts them, `--write-wav DIR`
+  writes clean WAVs at BASIC's own timing; it prints the `--tape-speed` the sim needs for a fast or slow dump.
+- `tools/img2d88.py IN OUT.1dd` converts SMC-70/777 ImageDisk (.imd) or raw (.img) disks to the D88 the core mounts
+  (Sony's CP/M 2.2 boots from them).
+- `tools/gen_kbd_table.py` generates the PS/2 keyboard table from CSP's.

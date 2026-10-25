@@ -66,6 +66,9 @@ struct Options {
     std::set<uint32_t> resets;            // --reset-at / --warm-reset-at FRAME
     std::set<uint32_t> warm_resets;
     std::string wav_file;                 // --wav
+    std::string tape_file;                // --tape FILE[@SECONDS]: WAV played into the cassette input
+    double      tape_start = 0;
+    double      tape_speed = 1.0;         // --tape-speed F: play the WAV at F times its rate
     uint32_t    save_frame = 0;           // --save-state FRAME:FILE
     std::string save_file;
     std::string load_file;                // --load-state FILE
@@ -81,7 +84,8 @@ static void usage()
 "                         --rom-dir DIR: DIR/SMCROM.DAT and DIR/KANJIROM.DAT\n"
 "  --fdd FILE             D88/.1dd image in drive A; --fdd-b FILE: drive B; --fdd-readonly: don't write to them\n"
 "  --type FRAME:TEXT      type TEXT from FRAME (US PS/2 layout); \\n or {RETURN}, {ESC}, {F1}, {WAITn} ...\n"
-"  --joy F:PORT:BITS      joystick PORT (0/1) MiSTer bits from frame F (1 right 2 left 4 down 8 up 16/32 buttons)\n"
+"  --joy F:PORT:BITS[:H]  joystick PORT (0/1) from frame F: MiSTer bits (1 right 2 left 4 down 8 up 16/32 buttons)\n"
+"                         or names (u/d/l/r/a/b/fire1/fire2, +-joined); optional :H releases after H frames\n"
 "  --mouse                the mouse on joystick port 2 instead of joystick 2 (OSD option)\n"
 "  --mouse-move F:DX:DY[:B]  move the mouse DX right, DY down from frame F (PS/2 packets, one per ms); buttons B\n"
 "                         (1 left, 2 right) from then on\n"
@@ -99,6 +103,9 @@ static void usage()
 "  --trace-io FILE        frame,cpu_cycle,pc,kind,address,data for each IN/OUT (CSP CLI columns)\n"
 "  --trace-from N         start tracing at frame N; --trace-to N stops after frame N\n"
 "  --wav FILE             record the audio output (48 kHz, 16-bit stereo WAV)\n"
+"  --tape FILE[@SEC]      play a WAV (8/16-bit PCM, first channel) into the cassette input from SEC seconds; the tape\n"
+"                         runs while the motor relay is on (port 1Ch) and stops with it, as a recorder with remote\n"
+"  --tape-speed F         play the tape at F times its speed (a WAV dumped from a fast deck: 0.95 plays it slower)\n"
 "  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture (640x200).\n");
 }
@@ -110,6 +117,30 @@ static void mkdir_p(const std::string &path)
 }
 
 static uint32_t parse_num(const std::string &s) { return (uint32_t)std::stoul(s, nullptr, 0); }
+
+static bool parse_joy_bits(const std::string &s, uint32_t &bits)
+{
+    if (s.empty()) return false;
+    if (isdigit((unsigned char)s[0])) { bits = parse_num(s); return true; }
+    bits = 0;
+    size_t i = 0;
+    while (i < s.size()) {
+        size_t j = s.find_first_of("+,|", i);
+        std::string tok = s.substr(i, j == std::string::npos ? std::string::npos : j - i);
+        for (char &c : tok) c = (char)tolower((unsigned char)c);
+        if (tok == "r" || tok == "right") bits |= 1;
+        else if (tok == "l" || tok == "left") bits |= 2;
+        else if (tok == "d" || tok == "down") bits |= 4;
+        else if (tok == "u" || tok == "up") bits |= 8;
+        else if (tok == "a" || tok == "1" || tok == "t" || tok == "trig1" || tok == "fire" || tok == "fire1" || tok == "btn1") bits |= 16;
+        else if (tok == "b" || tok == "2" || tok == "user" || tok == "trig2" || tok == "fire2" || tok == "btn2") bits |= 32;
+        else if (tok == "none" || tok == "off" || tok == "release") {}
+        else return false;
+        if (j == std::string::npos) break;
+        i = j + 1;
+    }
+    return true;
+}
 
 static bool parse_args(int argc, char **argv, Options &o)
 {
@@ -154,9 +185,20 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--reset-at") o.resets.insert(parse_num(next()));
         else if (a == "--warm-reset-at") o.warm_resets.insert(parse_num(next()));
         else if (a == "--joy") {
+            std::string s = next();
+            size_t c1 = s.find(':'), c2 = c1 == std::string::npos ? std::string::npos : s.find(':', c1 + 1);
+            if (c1 == std::string::npos || c2 == std::string::npos) { fprintf(stderr, "--joy wants F:PORT:BITS[:HOLD]\n"); return false; }
+            size_t c3 = s.find(':', c2 + 1);
             Options::JoyEv j{};
-            if (sscanf(next().c_str(), "%u:%d:%i", &j.frame, &j.port, &j.bits) != 3) { fprintf(stderr, "--joy wants F:PORT:BITS\n"); return false; }
+            j.frame = parse_num(s.substr(0, c1));
+            j.port = (int)parse_num(s.substr(c1 + 1, c2 - c1 - 1));
+            std::string bstr = s.substr(c2 + 1, c3 == std::string::npos ? std::string::npos : c3 - c2 - 1);
+            if (!parse_joy_bits(bstr, j.bits)) { fprintf(stderr, "--joy: bad buttons '%s'\n", bstr.c_str()); return false; }
             o.joy.push_back(j);
+            if (c3 != std::string::npos) {
+                uint32_t hold = parse_num(s.substr(c3 + 1));
+                if (hold > 0) o.joy.push_back({j.frame + hold, j.port, 0});
+            }
         }
         else if (a == "--mouse") o.mouse = true;
         else if (a == "--mouse-move") {
@@ -167,6 +209,12 @@ static bool parse_args(int argc, char **argv, Options &o)
             o.mouse_moves.push_back(m);
         }
         else if (a == "--wav") o.wav_file = next();
+        else if (a == "--tape-speed") o.tape_speed = atof(next().c_str());
+        else if (a == "--tape") {
+            o.tape_file = next();
+            size_t at = o.tape_file.rfind('@');
+            if (at != std::string::npos) { o.tape_start = atof(o.tape_file.c_str() + at + 1); o.tape_file.resize(at); }
+        }
         else if (a == "--save-state") { if (!pair("FRAME:FILE", o.save_frame, o.save_file)) return false; }
         else if (a == "--load-state") o.load_file = next();
         else if (a[0] == '+') {}   // Verilator plusargs
@@ -208,6 +256,12 @@ private:
     uint32_t  wav_samples = 0;
     double    wav_next = 0;
     bool      wav_on = false;             // from reset release (the IPL beeps before the first frame)
+
+    // --tape: samples scaled to -1..1, position in samples; it advances only while the motor is on
+    std::vector<float> tape;
+    double    tape_rate = 0, tape_pos = 0;
+    bool      tape_level = false, tape_motor = false;
+    bool      load_tape();
 
     struct HState {
         uint64_t cycle, cpu_cycles, ps2_next_ok;
@@ -464,6 +518,19 @@ void Sim::clock()
     cycle++;
 
     if (top->cpu_ce) cpu_cycles++;
+    if (!tape.empty()) {
+        if (top->tape_motor != tape_motor) {
+            tape_motor = top->tape_motor;
+            if (!opt.quiet) fprintf(stderr, "[sim] frame %u: tape motor %s at %.2f s\n", frame, tape_motor ? "on" : "off", tape_pos / tape_rate);
+        }
+        if (tape_motor && tape_pos < tape.size() - 1) {
+            float v = tape[(size_t)tape_pos];
+            if (v > 0.05f) tape_level = true;            // a little hysteresis, as a comparator on line-in
+            else if (v < -0.05f) tape_level = false;
+            tape_pos += tape_rate * opt.tape_speed / CLK_HZ;
+        }
+        top->tape_in = tape_level;
+    }
     sd_step();
     if (save_pending && sd_state == SD_IDLE) { save_pending = false; save_state(); }
     if (fwav && wav_on && cycle >= wav_next) {
@@ -600,6 +667,37 @@ void Sim::schedule_typing()
     }
 }
 
+bool Sim::load_tape()
+{
+    FILE *f = fopen(opt.tape_file.c_str(), "rb");
+    if (!f) { fprintf(stderr, "cannot read %s\n", opt.tape_file.c_str()); return false; }
+    std::vector<uint8_t> d;
+    uint8_t buf[65536];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof buf, f)) > 0) d.insert(d.end(), buf, buf + n);
+    fclose(f);
+    auto u16 = [&](size_t i) { return (uint32_t)d[i] | (uint32_t)d[i + 1] << 8; };
+    auto u32 = [&](size_t i) { return u16(i) | u16(i + 2) << 16; };
+    if (d.size() < 12 || memcmp(&d[0], "RIFF", 4) || memcmp(&d[8], "WAVE", 4)) { fprintf(stderr, "%s: not a WAV file\n", opt.tape_file.c_str()); return false; }
+    uint32_t ch = 0, bits = 0;
+    for (size_t p = 12; p + 8 <= d.size(); ) {
+        uint32_t len = u32(p + 4);
+        if (!memcmp(&d[p], "fmt ", 4)) { ch = u16(p + 10); tape_rate = u32(p + 12); bits = u16(p + 22); }
+        else if (!memcmp(&d[p], "data", 4)) {
+            if (!ch || (bits != 8 && bits != 16)) { fprintf(stderr, "%s: only 8/16-bit PCM\n", opt.tape_file.c_str()); return false; }
+            size_t step = ch * bits / 8, end = std::min(d.size(), p + 8 + (size_t)len);
+            for (size_t i = p + 8; i + step <= end; i += step)
+                tape.push_back(bits == 8 ? (d[i] - 128) / 128.0f : (int16_t)u16(i) / 32768.0f);
+            break;
+        }
+        p += 8 + len + (len & 1);
+    }
+    if (tape.empty()) { fprintf(stderr, "%s: no samples\n", opt.tape_file.c_str()); return false; }
+    tape_pos = opt.tape_start * tape_rate;
+    if (!opt.quiet) fprintf(stderr, "[sim] tape %s: %.1f s at %.0f Hz, from %.2f s\n", opt.tape_file.c_str(), tape.size() / tape_rate, tape_rate, opt.tape_start);
+    return true;
+}
+
 int Sim::run()
 {
     mkdir_p(opt.out_dir);
@@ -620,6 +718,8 @@ int Sim::run()
         wav_header(fwav, 0);
     }
 
+    if (!opt.tape_file.empty() && !load_tape()) return 2;
+    top->tape_in = 0;
     if (!opt.load_file.empty()) {
         if (!load_state()) return 2;
         top->border_en = opt.border;
@@ -628,6 +728,10 @@ int Sim::run()
         wav_on = true;
         wav_next = (double)cycle;
         schedule_typing();
+        auto range = ps2_schedule.equal_range(frame);
+        for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
+        for (auto &j : opt.joy) if (j.frame == frame) { if (j.port) top->joy1 = j.bits; else top->joy0 = j.bits; }
+        for (auto &m : opt.mouse_moves) if (m.frame == frame) queue_mouse(m.dx, m.dy, m.buttons);
         while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
         return finish();
     }
@@ -666,6 +770,8 @@ int Sim::run()
     schedule_typing();
     auto range = ps2_schedule.equal_range(0);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
+    for (auto &j : opt.joy) if (j.frame == 0) { if (j.port) top->joy1 = j.bits; else top->joy0 = j.bits; }
+    for (auto &m : opt.mouse_moves) if (m.frame == 0) queue_mouse(m.dx, m.dy, m.buttons);
 
     while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
     return finish();

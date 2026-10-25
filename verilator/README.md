@@ -47,13 +47,16 @@ speed. The default build is the MiSTer configuration.
                          inside frame F (events 1 ms apart, up to 15 keys)
                          {RETURN} {ESC} {BS} {DEL} {INS} {HOME} {CLR} {RUBOUT} {LF} {H} {BREAK} arrows {F1}-{F5} {WAITn}
                          {KANA} {RALT} {RGUI} {CTRL} {SHIFT}; {+NAME} / {-NAME} press / release only (a frame each)
-  --joy F:PORT:BITS      joystick state from frame F (MiSTer bits: 1 right 2 left 4 down 8 up 16/32 triggers)
+  --joy F:PORT:BITS[:H]  joystick state from frame F: MiSTer bits (1 right 2 left 4 down 8 up 16/32 triggers)
+                         or names (u/d/l/r/a/b/fire1/fire2, +-joined); optional :H releases after H frames
   --mouse                the mouse on joystick port 2 (OSD option); --mouse-move F:DX:DY[:B] moves it DX right and
                          DY down from frame F (PS/2 packets of up to 100, one per ms), buttons B (1 left, 2 right)
   --reset-at F / --warm-reset-at F   cold / warm (RESET key) reset before frame F
   --border               the border colour around the picture (704x232), the OSD option
   --kanji FILE           kanji ROM (default ../bios/KANJIROM.DAT); --rom-dir DIR: DIR/SMCROM.DAT + DIR/KANJIROM.DAT
   --wav FILE             audio from reset release, 48 kHz 16-bit stereo
+  --tape FILE[@SEC]      play a WAV into the cassette input from SEC seconds, while the motor relay is on
+  --tape-speed F         play it at F times its speed (dumps from a fast deck: see tools/smc777_tape.py)
   --save-state N:FILE    save the machine at the start of frame N; --load-state FILE resumes there
 ```
 

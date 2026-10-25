@@ -232,7 +232,8 @@ always @(posedge clk_sys) begin
 				case (din[7:6])
 				2'b11: begin init_keys(); key_cmd <= 8'h00; end
 				2'b00: key_cmd <= 8'h00;
-				2'b01: rep_interval <= 12'd20 + 12'd20 * din[3:0];
+				2'b01: if (din[5]) rep_interval <= 12'd20 + 12'd20 * din[3:0];
+				       else        rep_start    <= 12'd500 + 12'd100 * din[3:0];
 				2'b10: begin
 					fk_index <= 2'd0;
 					case (din[3:0])
