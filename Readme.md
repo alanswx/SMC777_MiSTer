@@ -41,7 +41,7 @@ Floppies: D88 images on drives A and B (S0/S1). The SMC-777 disk images found as
 The SMC-777 keyboard is ASCII-layout, so a US PC keyboard maps by position. Shift, Ctrl, Caps Lock; the JP kana
 key, or Right Alt tapped on its own, toggles kana (Right Alt as part of a combination, such as a KVM's escape keys,
 does not). F1-F5 are the programmable function keys, F11 = H (home-position key), F12 = LF,
-End = CLR, F10 or the JP yen key = RUB OUT, backtick = ` ~, backslash = \ |.
+End = CLR, F6, F10 or the JP yen key = RUB OUT (ル), backtick = ` ~, backslash = \ |.
 
 ## Cassette
 

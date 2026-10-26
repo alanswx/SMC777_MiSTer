@@ -49,6 +49,7 @@ function automatic [6:0] kbd_index(input [8:0] k);
 	9'h055: kbd_index = 7'd42;
 	9'h06a: kbd_index = 7'd43;
 	9'h009: kbd_index = 7'd43;
+	9'h00b: kbd_index = 7'd43;
 	9'h066: kbd_index = 7'd44;
 	9'h015: kbd_index = 7'd45;
 	9'h01d: kbd_index = 7'd46;
