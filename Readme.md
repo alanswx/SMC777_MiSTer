@@ -53,7 +53,7 @@ End = CLR, F6, F10 or the JP yen key = RUB OUT (ル), backtick = ` ~, backslash 
 A WAV on the Tape slot (`rtl/smc777_tape.sv`): PCM, 8- or 16-bit, mono or stereo (the first channel plays), 4-192 kHz,
 streamed from the SD card, any length. Each mount starts rewound. The mount shows "Tape ready (rewound)" with a reminder to
 `CLOAD` in System 1.1J BASIC (or, with drive A empty, to boot System 1.1J first) for 2 seconds; anything else is
-"Tape format not supported". In System 1.1J BASIC type `CLOAD "NAME"` (or `CLOAD` for the next file): the deck plays while
+"Tape format not supported". In System 1.1J BASIC type `CLOAD "NAME"` (or `CLOAD ""` for the next file; a bare `CLOAD` is a syntax error): the deck plays while
 BASIC has the motor relay (port 1Ch) on, like a recorder with remote control. Rewind tape (Machine) goes back to the
 start, for example to load a file again.
 

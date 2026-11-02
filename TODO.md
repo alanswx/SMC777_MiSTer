@@ -27,6 +27,22 @@ Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## Hardware (mister192, 2026-11-02, HDMI through MiSTerKVMS, releases/SMC777_20261102.rbf)
+
+- Tape slot: CONVERT, SFE, BYTE.SET, MAKEMAP, TAKOKU load at 8x (MAKEMAP and TAKOKU auto-run); CONVERT at Normal in
+  29 s (the WAV is 28 s); Rewind tape then a second CLOAD finds the file again; overlay and mount pop-up correct.
+  `CLOAD ""` loads the next file; a bare `CLOAD` is a Syntax error (the pop-up said "or CLOAD": fixed in 20261102).
+- LAB777.PAC / LAB70.PAC: "Found", 13 blocks, then no Ready and no response; the sim does the same. Their headers
+  give the same length field as CONVERT and BYTE.SET (1716, 14 blocks) but the tape has 13: the dumps look short.
+- Disk A: BASIC SAVE, cold reload, LOAD and RUN; the image on the SD card changes. Drive B: CP/M 2.2 `DIR B:` and
+  `SAVE 1 B:MTEST.COM` (written to the SD image). System 1.1J BASIC answers `SAVE "B:X"` with "Drive not available"
+  in the sim too, with no FDC access at all (a software setting, not the drive; unresolved).
+- Video: Scandoubler Fx CRT 25% scanlines and Border on over HDMI; "Changes pending", Apply and reset.
+- Boot sweep, title/menu after 25 s, all 16 fine: Mario Bros. Special, Star Blazer, A.E, Miner 2049er, Aztec, Bug
+  Attack, Fire Dragon, Salad no Kuni no Tomato Hime, Yokai Tantei Chima Chima, Exciting Billiard Cannon Shot, Transitt,
+  Penjamin, Demon Roulette, Hudson Best Selection I, Othello, Rock Fury (System 1.4J menu).
+- Still not tried: analog 15 kHz / CRT, joysticks in a game (the KVM has no joystick input), line-in.
+
 ## Tape slot and OSD pages (2026-10-27, releases/SMC777_20261027.rbf)
 
 WAV tape on OSD slot S2 (`rtl/smc777_tape.sv`, streamed from SD, 8-sector ring), turbo 8x while the motor runs

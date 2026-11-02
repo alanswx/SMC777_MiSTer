@@ -237,9 +237,9 @@ localparam CONF_STR = {
 
 	// shown for 2 s at a tape mount (Main's Info box: lines up to 30 columns, no commas): 1 ready, 2 rejected,
 	// 3 ready with no disk in drive A, where BASIC (System 1.1J) has to come from
-	"I,Tape ready (rewound)\nIn System 1.1J BASIC type\nCLOAD \"NAME\" or CLOAD,",
+	"I,Tape ready (rewound)\nIn System 1.1J BASIC type\nCLOAD \"NAME\" or CLOAD \"\",",
 	"Tape format not supported,",
-	"Tape ready (rewound)\nBoot System 1.1J on drive A\nthen in BASIC type CLOAD;",
+	"Tape ready (rewound)\nBoot System 1.1J on drive A\nthen in BASIC type CLOAD \"\";",
 	"J1,Trigger 1,Trigger 2;",
 	"jn,A,B;",
 	"V,v",`BUILD_DATE
