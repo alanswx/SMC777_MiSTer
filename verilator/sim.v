@@ -27,11 +27,21 @@ module top(
    input  [24:0] ps2_mouse,
    input         reset_warm,
    input         border_en,
-   input         tape_in,
+   input         tape_in,             // line-in (--tape), when no tape image is mounted
    output        tape_motor,
+   input         tape_turbo_req,      // OSD Tape speed 8x
+   input         tape_rewind,
+   input         tape_overlay_en,
+   output        tape_loaded /*verilator public_flat*/,
+   output        tape_turbo /*verilator public_flat*/,
+   output        tape_underflow /*verilator public_flat*/,
+   output        tape_bad /*verilator public_flat*/,
+   output [31:0] tape_lba,
+   output        tape_rd,
+   input         tape_ack,
 
    // floppy image slots (hps_io sd_* bus), flattened for the C++ harness
-   input   [1:0] img_mounted,
+   input   [2:0] img_mounted,          // 2: the tape
    input         img_readonly,
    input  [63:0] img_size,
    output [31:0] fdd_lba0,
@@ -72,10 +82,40 @@ assign fdd_buff_din0 = fdd_buff_din[0];
 assign fdd_buff_din1 = fdd_buff_din[1];
 
 `ifdef SMC_FAST_SIM
-smc777 #(.CLK_MUL(1)) smc777        // 'make fast': clk_sys = the 32.2238 MHz master clock
+localparam CLK_MUL = 1, CLK_HZ = 32223800, TURBO = 4;   // 'make fast': clk_sys = the 32.2238 MHz master clock
 `else
-smc777 #(.CLK_MUL(2)) smc777        // as the MiSTer: clk_sys = 64.4476 MHz
+localparam CLK_MUL = 2, CLK_HZ = 64447600, TURBO = 8;   // as the MiSTer: clk_sys = 64.4476 MHz
 `endif
+
+wire        tape_level, tape_playing, cpu_turbo;
+wire [17:0] tape_rate;
+wire [31:0] tape_pos, tape_len;
+wire  [7:0] R, G, B;
+wire        HB, VB;
+assign VGA_HB = HB;
+assign VGA_VB = VB;
+
+smc777_tape #(.CLK_HZ(CLK_HZ), .TURBO(TURBO)) smc777_tape
+(
+   .clk(clk_sys), .rewind(tape_rewind), .motor(tape_motor), .turbo_req(tape_turbo_req),
+   .img_mounted(img_mounted[2]), .img_size(img_size),
+   .sd_lba(tape_lba), .sd_rd(tape_rd), .sd_ack(tape_ack),
+   .sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout), .sd_buff_wr(sd_buff_wr),
+   .level(tape_level), .loaded(tape_loaded), .playing(tape_playing), .turbo(tape_turbo),
+   .ready(), .bad(tape_bad), .underflow(tape_underflow),
+   .rate(tape_rate), .position(tape_pos), .length(tape_len)
+);
+
+smc777_tape_overlay #(.TURBO(TURBO)) smc777_tape_overlay
+(
+   .clk(clk_sys),
+   .loaded(tape_loaded), .playing(tape_playing), .fast(tape_turbo), .underflow(tape_underflow),
+   .rate(tape_rate), .position(tape_pos), .length(tape_len),
+   .enable(tape_overlay_en), .ce_pix(ce_pix), .hblank(HB), .vblank(VB),
+   .r_in(R), .g_in(G), .b_in(B), .r_out(VGA_R), .g_out(VGA_G), .b_out(VGA_B)
+);
+
+smc777 #(.CLK_MUL(CLK_MUL)) smc777
 (
    .clk_sys(clk_sys),
    .reset(reset),
@@ -92,16 +132,17 @@ smc777 #(.CLK_MUL(2)) smc777        // as the MiSTer: clk_sys = 64.4476 MHz
    .ioctl_dout(ioctl_dout),
 
    .ce_pix(ce_pix),
-   .R(VGA_R), .G(VGA_G), .B(VGA_B),
+   .R(R), .G(G), .B(B),
    .HSync(VGA_HS), .VSync(VGA_VS),
-   .HBlank(VGA_HB), .VBlank(VGA_VB),
+   .HBlank(HB), .VBlank(VB),
 
    .audio_l(AUDIO_L),
    .audio_r(AUDIO_R),
 
-   .tape_in(tape_in), .tape_motor(tape_motor), .tape_out(),
+   .tape_in(tape_loaded ? tape_level : tape_in), .tape_motor(tape_motor), .tape_out(),
+   .cpu_turbo(tape_turbo), .tape_audio(1'b1),
 
-   .img_mounted(img_mounted), .img_readonly(img_readonly), .img_size(img_size),
+   .img_mounted(img_mounted[1:0]), .img_readonly(img_readonly), .img_size(img_size),
    .sd_lba(fdd_lba), .sd_rd(fdd_rd), .sd_wr(fdd_wr), .sd_ack(fdd_ack),
    .sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout), .sd_buff_din(fdd_buff_din), .sd_buff_wr(sd_buff_wr),
    .fdd_busy(fdd_busy),

@@ -27,6 +27,15 @@ Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## Tape slot and OSD pages (2026-10-27, releases/SMC777_20261027.rbf)
+
+WAV tape on OSD slot S2 (`rtl/smc777_tape.sv`, streamed from SD, 8-sector ring), turbo 8x while the motor runs
+(CPU 32 MHz, tape timebase 8x, FDC/PSG/video unchanged; only for WAVs up to 50 000 B/s), status overlay
+(`rtl/smc777_tape_overlay.sv`), mount pop-up (Info) with a CLOAD reminder. OSD restructured to the MiSTer computer
+standard (Machine/Video/Input/Audio pages, Apply and reset). Sim: `--tape-img`, `--tape-normal`, `--tape-overlay`,
+`--tape-rewind-at`; CLOAD "CONVERT" at 8x loads and LISTs; all 13 regression tests pass. Timing met (+2.916 ns setup,
++0.255 ns hold), 82% RAM blocks. Hardware (10.0.2.12, user): CONVERT and SFE load at 8x, overlay and pop-up good.
+
 ## Hardware (mister126, 2026-10-17, HDMI through MiSTerKVMS)
 
 Native screenshots compared at each core pixel: System 1.1J menu, Yakyuu-Kyou title and S-OS 2.2 identical to CSP;

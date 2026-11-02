@@ -56,7 +56,10 @@ struct Options {
     uint32_t    trace_from = 0, trace_to = 0xFFFFFFFF;
     std::string rom_file;                 // --rom: IPL ROM (SMCROM.DAT, 16 KiB)
     std::string kanji_file;               // --kanji: KANJIROM.DAT (144 KiB)
-    std::string fdd[2];                   // --fdd / --fdd-b: D88 (.1dd) images in drives A and B
+    std::string fdd[3];                   // --fdd / --fdd-b: D88 (.1dd) images in drives A and B; [2] --tape-img
+    bool        tape_normal = false;      // --tape-normal: OSD Tape speed Normal (default 8x)
+    bool        tape_overlay = false;     // --tape-overlay: draw the tape status bar (off: screens stay comparable)
+    std::set<uint32_t> tape_rewinds;      // --tape-rewind-at FRAME
     bool        fdd_readonly = false;     // --fdd-readonly: never write back to the image files
     struct JoyEv { uint32_t frame; int port; uint32_t bits; };
     std::vector<JoyEv> joy;               // --joy FRAME:PORT:BITS
@@ -106,6 +109,9 @@ static void usage()
 "  --tape FILE[@SEC]      play a WAV (8/16-bit PCM, first channel) into the cassette input from SEC seconds; the tape\n"
 "                         runs while the motor relay is on (port 1Ch) and stops with it, as a recorder with remote\n"
 "  --tape-speed F         play the tape at F times its speed (a WAV dumped from a fast deck: 0.95 plays it slower)\n"
+"  --tape-img FILE        mount a WAV on the tape slot (S2): the core's own deck (rtl/smc777_tape.sv) plays it, with\n"
+"                         turbo while the motor is on; --tape-normal = OSD Tape speed Normal; --tape-overlay draws\n"
+"                         the status bar; --tape-rewind-at FRAME presses Rewind tape\n"
 "  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture (640x200).\n");
 }
@@ -182,6 +188,10 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--fdd") o.fdd[0] = next();
         else if (a == "--fdd-b") o.fdd[1] = next();
         else if (a == "--fdd-readonly") o.fdd_readonly = true;
+        else if (a == "--tape-img") o.fdd[2] = next();
+        else if (a == "--tape-normal") o.tape_normal = true;
+        else if (a == "--tape-overlay") o.tape_overlay = true;
+        else if (a == "--tape-rewind-at") o.tape_rewinds.insert((uint32_t)atoi(next().c_str()));
         else if (a == "--reset-at") o.resets.insert(parse_num(next()));
         else if (a == "--warm-reset-at") o.warm_resets.insert(parse_num(next()));
         else if (a == "--joy") {
@@ -292,8 +302,9 @@ private:
     void reset_machine(bool warm);
 
     // hps_io sd_* block interface for the floppy slots: 512-byte blocks, one byte per clock
-    FILE     *fdd[2] = {nullptr, nullptr};
-    uint64_t  fdd_size[2] = {0, 0};
+    FILE     *fdd[3] = {nullptr, nullptr, nullptr};   // [2]: the tape image (read only)
+    uint64_t  fdd_size[3] = {0, 0, 0};
+    bool      tape_turbo = false, tape_underflow = false;
     enum { SD_IDLE, SD_READ, SD_READ_END, SD_WRITE } sd_state = SD_IDLE;
     int       sd_slot = 0, sd_idx = 0;
     uint32_t  sd_lba = 0;
@@ -306,17 +317,17 @@ private:
 
 void Sim::sd_step()
 {
-    auto req_rd = [&](int k) -> bool { return (top->fdd_rd >> k) & 1; };
-    auto req_wr = [&](int k) -> bool { return (top->fdd_wr >> k) & 1; };
-    auto ack    = [&](int k, int v) { top->fdd_ack = v ? (1 << k) : 0; };
+    auto req_rd = [&](int k) -> bool { return k == 2 ? top->tape_rd : (top->fdd_rd >> k) & 1; };
+    auto req_wr = [&](int k) -> bool { return k == 2 ? false : (top->fdd_wr >> k) & 1; };
+    auto ack    = [&](int k, int v) { top->fdd_ack = v && k < 2 ? (1 << k) : 0; top->tape_ack = v && k == 2; };
 
     top->sd_buff_wr = 0;
     switch (sd_state) {
     case SD_IDLE:
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < 3; k++) {
             if (!fdd[k] || !(req_rd(k) || req_wr(k))) continue;
             sd_slot = k;
-            sd_lba = k ? top->fdd_lba1 : top->fdd_lba0;
+            sd_lba = k == 2 ? top->tape_lba : k ? top->fdd_lba1 : top->fdd_lba0;
             sd_idx = 0;
             ack(k, 1);
             if (req_rd(k)) {
@@ -363,7 +374,7 @@ void Sim::sd_step()
 
 bool Sim::open_fdd(int k)
 {
-    fdd[k] = fopen(opt.fdd[k].c_str(), opt.fdd_readonly ? "rb" : "r+b");
+    fdd[k] = fopen(opt.fdd[k].c_str(), opt.fdd_readonly || k == 2 ? "rb" : "r+b");
     if (!fdd[k]) { fprintf(stderr, "cannot open disk image %s\n", opt.fdd[k].c_str()); return false; }
     fseeko(fdd[k], 0, SEEK_END);
     fdd_size[k] = (uint64_t)ftello(fdd[k]);
@@ -380,7 +391,11 @@ bool Sim::mount_fdd(int k)
     clock();
     top->img_mounted = 0;
     for (int i = 0; i < 4; i++) clock();
-    if (!opt.quiet) fprintf(stderr, "[sim] drive %c: '%s', %llu bytes\n", 'A' + k, opt.fdd[k].c_str(), (unsigned long long)fdd_size[k]);
+    if (!opt.quiet) {
+        if (k == 2) fprintf(stderr, "[sim] tape: '%s', %llu bytes, %s\n", opt.fdd[k].c_str(), (unsigned long long)fdd_size[k],
+                            top->tape_loaded ? "loaded" : "not loaded yet");
+        else fprintf(stderr, "[sim] drive %c: '%s', %llu bytes\n", 'A' + k, opt.fdd[k].c_str(), (unsigned long long)fdd_size[k]);
+    }
     return true;
 }
 
@@ -481,7 +496,7 @@ bool Sim::load_state()
     cycle = h.cycle; cpu_cycles = h.cpu_cycles; ps2_next_ok = h.ps2_next_ok; frame = h.frame;
     prev_hb = h.prev_hb; prev_vb = h.prev_vb; prev_m1 = h.prev_m1; ps2_toggle = h.ps2_toggle;
     last_pc = h.last_pc; fb_w = h.fb_w;
-    for (int k = 0; k < 2; k++)
+    for (int k = 0; k < 3; k++)
         if (!opt.fdd[k].empty() && !open_fdd(k)) return false;
     if (!opt.quiet) fprintf(stderr, "[sim] state loaded from %s, frame %u\n", opt.load_file.c_str(), frame);
     return true;
@@ -531,6 +546,17 @@ void Sim::clock()
         }
         top->tape_in = tape_level;
     }
+    if (fdd[2] && top->tape_motor != tape_motor) {
+        tape_motor = top->tape_motor;
+        if (!opt.quiet) fprintf(stderr, "[sim] frame %u: tape motor %s\n", frame, tape_motor ? "on" : "off");
+    }
+    if (top->tape_turbo != tape_turbo) {
+        tape_turbo = top->tape_turbo;
+        if (!opt.quiet) fprintf(stderr, "[sim] frame %u: tape turbo %s\n", frame, tape_turbo ? "on" : "off");
+    }
+    if (top->tape_underflow && !tape_underflow && !opt.quiet) fprintf(stderr, "[sim] frame %u: tape underflow\n", frame);
+    tape_underflow = top->tape_underflow;
+    if (top->tape_bad && !opt.quiet) fprintf(stderr, "[sim] tape image rejected (not an 8/16-bit PCM WAV)\n");
     sd_step();
     if (save_pending && sd_state == SD_IDLE) { save_pending = false; save_state(); }
     if (fwav && wav_on && cycle >= wav_next) {
@@ -596,6 +622,7 @@ void Sim::end_frame()
     for (auto &m : opt.mouse_moves) if (m.frame == frame) queue_mouse(m.dx, m.dy, m.buttons);
     if (opt.resets.count(frame)) reset_machine(false);
     if (opt.warm_resets.count(frame)) reset_machine(true);
+    if (opt.tape_rewinds.count(frame)) { top->tape_rewind = 1; clock(); top->tape_rewind = 0; }
 }
 
 bool Sim::want_png(uint32_t f) const
@@ -724,6 +751,8 @@ int Sim::run()
         if (!load_state()) return 2;
         top->border_en = opt.border;
         top->mouse_en = opt.mouse;
+        top->tape_turbo_req = !opt.tape_normal;
+        top->tape_overlay_en = opt.tape_overlay;
         started = true;
         wav_on = true;
         wav_next = (double)cycle;
@@ -751,7 +780,10 @@ int Sim::run()
     top->reset = 0;
     wav_on = true;
     wav_next = (double)cycle;
-    for (int k = 0; k < 2; k++)
+    top->tape_turbo_req = !opt.tape_normal;
+    top->tape_overlay_en = opt.tape_overlay;
+    top->tape_rewind = 0;
+    for (int k = 0; k < 3; k++)
         if (!opt.fdd[k].empty() && !mount_fdd(k)) return 2;
 
     // The CRTC is unprogrammed until the IPL sets it up: frame 0 is the first full frame after that.

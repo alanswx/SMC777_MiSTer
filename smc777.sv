@@ -192,28 +192,54 @@ assign BUTTONS = 0;
 
 //////////////////////////////////////////////////////////////////
 
-wire [1:0] ar = status[122:121];
+wire [1:0] ar = cfg[122:121];
 
 assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 
 // boot.rom (index 0, loaded by Main from games/SMC777/boot.rom): SMCROM.DAT (16 KiB IPL) followed by KANJIROM.DAT
 // (144 KiB). Floppies: D88 images (the usual ".1dd" SMC-777 images are D88; rename or pick "all files").
+// Tape: a WAV (rtl/smc777_tape.sv), not remembered, rewound at every mount.
+// Layout: ~/dev2/osd-standard.md and tape-standard.md. P1 Machine, P2 Video, P3 Input, P4 Audio. Video settings
+// take effect at the next reset (cfg); media, Input, the tape rows and the buttons act at once. The status bits are
+// those of the earlier flat menu, so saved settings carry over.
 `include "build_id.v"
 localparam CONF_STR = {
 	"SMC777;;",
-	"S0,D881DDD77,Drive A;",
+	"-;",
+	"S0,D881DDD77,Pri. Drive A;",
 	"S1,D881DDD77,Drive B;",
+	"S2,WAV,Tape;",
+	"F0,ROM,Load ROM;",
 	"-;",
-	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[4:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
-	"O[5],Border,Off,On;",
-	"O[6],Port 2,Joystick,Mouse;",
+	"P1,Machine;",
+	"P2,Video;",
+	"P3,Input;",
+	"P4,Audio;",
 	"-;",
-	"F0,ROM,Load boot ROM;",
-	"-;",
-	"T[1],Warm reset (RESET key);",
-	"R[0],Cold reset and close OSD;",
+	"h0-,Changes pending;",
+	"R[0],Apply and reset;",
+
+	// 8x: while the deck plays, the CPU and the tape run eight times faster
+	"P1O[7],Tape speed,8x,Normal;",
+	"P1-;",
+	"P1T[10],Rewind tape;",
+	"P1T[1],RESET key (warm);",
+
+	"P2O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"P2O[4:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+	"P2O[5],Border,Off,On;",
+	"P2O[8],Tape overlay,On,Off;",
+
+	"P3O[6],Port 2,Joystick,Mouse;",
+
+	"P4O[9],Tape audio,Off,On;",
+
+	// shown for 2 s at a tape mount (Main's Info box: lines up to 30 columns, no commas): 1 ready, 2 rejected,
+	// 3 ready with no disk in drive A, where BASIC (System 1.1J) has to come from
+	"I,Tape ready (rewound)\nIn System 1.1J BASIC type\nCLOAD \"NAME\" or CLOAD,",
+	"Tape format not supported,",
+	"Tape ready (rewound)\nBoot System 1.1J on drive A\nthen in BASIC type CLOAD;",
 	"J1,Trigger 1,Trigger 2;",
 	"jn,A,B;",
 	"V,v",`BUILD_DATE
@@ -233,19 +259,23 @@ wire        ioctl_wr;
 wire [26:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
 
-// Floppy image slots S0/S1 (drives A and B), 512-byte blocks
-wire  [1:0] img_mounted;
+// Image slots S0/S1 (floppy drives A and B) and S2 (tape), 512-byte blocks
+wire  [2:0] img_mounted;
 wire        img_readonly;
 wire [63:0] img_size;
-wire [31:0] sd_lba[2];
-wire  [1:0] sd_rd, sd_wr, sd_ack;
+wire [31:0] sd_lba[3];
+wire  [2:0] sd_rd, sd_wr, sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
-wire  [7:0] sd_buff_din[2];
+wire  [7:0] sd_buff_din[3];
 wire        sd_buff_wr;
-wire  [5:0] sd_blk_cnt[2] = '{6'd0, 6'd0};
+wire  [5:0] sd_blk_cnt[3] = '{6'd0, 6'd0, 6'd0};
 
-hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
+reg         info_req;
+reg   [7:0] info;
+wire        pending;
+
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(3)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -255,7 +285,9 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask(16'd0),
+	.status_menumask({15'd0, pending}),
+	.info_req(info_req),
+	.info(info),
 
 	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
@@ -300,9 +332,15 @@ pll pll
 wire warm  = status[1];
 wire reset = RESET | status[0] | buttons[1] | warm | ~pll_locked;
 
+// the settings the machine runs with, taken from the OSD at every reset (osd-standard.md rule 1): the Video page
+reg [127:0] cfg;
+always @(posedge clk_sys) if (reset) cfg <= status;
+assign pending = {status[5:3], status[122:121]} != {cfg[5:3], cfg[122:121]};
+
 ///////////////////////   CASSETTE   ///////////////////////////////
 
-// Line-in through the ADC (as the other MiSTer computer cores); line-out on the audio (cassette monitor)
+// A WAV on S2 (rtl/smc777_tape.sv), else line-in through the ADC (as the other MiSTer computer cores). The cassette
+// monitor (OSD Tape audio) is in the machine's sound.
 wire tape_adc, tape_adc_act;
 ltc2308_tape #(.CLK_RATE(64444444)) ltc2308_tape
 (
@@ -315,6 +353,59 @@ ltc2308_tape #(.CLK_RATE(64444444)) ltc2308_tape
 	.adc_data()
 );
 
+wire        tape_motor, tape_level, tape_loaded, tape_playing, tape_turbo, tape_ready, tape_bad, tape_underflow;
+wire [17:0] tape_rate;
+wire [31:0] tape_pos, tape_len;
+reg         rewind_d;
+always @(posedge clk_sys) rewind_d <= status[10];
+
+smc777_tape #(.CLK_HZ(64444444), .TURBO(8)) smc777_tape
+(
+	.clk(clk_sys),
+	.rewind(status[10] & ~rewind_d),
+	.motor(tape_motor),
+	.turbo_req(~status[7]),
+	.img_mounted(img_mounted[2]),
+	.img_size(img_size),
+	.sd_lba(sd_lba[2]),
+	.sd_rd(sd_rd[2]),
+	.sd_ack(sd_ack[2]),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_wr(sd_buff_wr),
+	.level(tape_level),
+	.loaded(tape_loaded),
+	.playing(tape_playing),
+	.turbo(tape_turbo),
+	.ready(tape_ready),
+	.bad(tape_bad),
+	.underflow(tape_underflow),
+	.rate(tape_rate),
+	.position(tape_pos),
+	.length(tape_len)
+);
+assign sd_wr[2] = 1'b0;
+assign sd_buff_din[2] = 8'd0;
+
+wire [31:0] fdd_lba[2];
+wire  [1:0] fdd_rd, fdd_wr;
+wire  [7:0] fdd_buff_din[2];
+assign sd_lba[0] = fdd_lba[0];
+assign sd_lba[1] = fdd_lba[1];
+assign sd_rd[1:0] = fdd_rd;
+assign sd_wr[1:0] = fdd_wr;
+assign sd_buff_din[0] = fdd_buff_din[0];
+assign sd_buff_din[1] = fdd_buff_din[1];
+
+// drive A holds a disk (System 1.1J BASIC loads tapes): img_size is valid with the mount strobe
+reg fdd_a_in = 1'b0;
+always @(posedge clk_sys) if (img_mounted[0]) fdd_a_in <= img_size != 64'd0;
+
+always @(posedge clk_sys) begin
+	info_req <= tape_ready | tape_bad;
+	if (tape_ready | tape_bad) info <= tape_bad ? 8'd2 : fdd_a_in ? 8'd1 : 8'd3;
+end
+
 ///////////////////////   MACHINE   ///////////////////////////////
 
 wire HBlank, HSync, VBlank, VSync, ce_pix;
@@ -326,7 +417,7 @@ smc777 #(.CLK_MUL(2)) smc777
 	.clk_sys(clk_sys),
 	.reset(reset),
 	.reset_warm(warm),
-	.border_en(status[5]),
+	.border_en(cfg[5]),
 	.ps2_key(ps2_key),
 	.joy0(joystick_0[5:0]),
 	.joy1(joystick_1[5:0]),
@@ -347,20 +438,22 @@ smc777 #(.CLK_MUL(2)) smc777
 	.audio_l(AUDIO_L),
 	.audio_r(AUDIO_R),
 
-	.tape_in(tape_adc & tape_adc_act),
-	.tape_motor(),
+	.tape_in(tape_loaded ? tape_level : tape_adc & tape_adc_act),
+	.tape_motor(tape_motor),
 	.tape_out(),
+	.cpu_turbo(tape_turbo),
+	.tape_audio(status[9]),
 
-	.img_mounted(img_mounted),
+	.img_mounted(img_mounted[1:0]),
 	.img_readonly(img_readonly),
 	.img_size(img_size),
-	.sd_lba(sd_lba),
-	.sd_rd(sd_rd),
-	.sd_wr(sd_wr),
-	.sd_ack(sd_ack),
+	.sd_lba(fdd_lba),
+	.sd_rd(fdd_rd),
+	.sd_wr(fdd_wr),
+	.sd_ack(sd_ack[1:0]),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
+	.sd_buff_din(fdd_buff_din),
 	.sd_buff_wr(sd_buff_wr),
 	.fdd_busy(fdd_busy),
 
@@ -377,11 +470,24 @@ assign LED_USER = ioctl_download | caps_led;
 ///////////////////////   VIDEO   ///////////////////////////////
 
 // 15.73 kHz: the scandoubler (with HQ2x / CRT scanlines) on request or for VGA monitors (forced_scandoubler)
-wire [1:0] scale = status[4:3];
+wire [1:0] scale = cfg[4:3];
 wire [2:0] sl    = scale ? scale - 1'd1 : 3'd0;
 wire       sd_on = scale != 2'd0 || forced_scandoubler;
 assign VGA_SL = sd_on ? sl[1:0] : 2'd0;
 assign CLK_VIDEO = clk_sys;
+
+// the tape status bar over the picture, before the scaler
+wire [7:0] ov_r, ov_g, ov_b;
+smc777_tape_overlay #(.TURBO(8)) smc777_tape_overlay
+(
+	.clk(clk_sys),
+	.loaded(tape_loaded), .playing(tape_playing), .fast(tape_turbo), .underflow(tape_underflow),
+	.rate(tape_rate), .position(tape_pos), .length(tape_len),
+	.enable(~status[8]),
+	.ce_pix(ce_pix), .hblank(HBlank), .vblank(VBlank),
+	.r_in(R), .g_in(G), .b_in(B),
+	.r_out(ov_r), .g_out(ov_g), .b_out(ov_b)
+);
 
 video_mixer #(.LINE_LENGTH(1024), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 (
@@ -391,7 +497,7 @@ video_mixer #(.LINE_LENGTH(1024), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	.scandoubler(sd_on),
 	.hq2x(scale == 2'd1),
 	.gamma_bus(gamma_bus),
-	.R(R), .G(G), .B(B),
+	.R(ov_r), .G(ov_g), .B(ov_b),
 	.HSync(HSync), .VSync(VSync),
 	.HBlank(HBlank), .VBlank(VBlank),
 	.HDMI_FREEZE(1'b0),

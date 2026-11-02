@@ -60,6 +60,8 @@ module smc777 #(parameter CLK_MUL = 2)
 	input         tape_in,
 	output        tape_motor,
 	output        tape_out,
+	input         cpu_turbo,          // the tape deck plays in turbo: the CPU runs TURBO times faster (rtl/smc777_tape.sv)
+	input         tape_audio,         // the cassette monitor in the sound
 
 	// floppy image slots (hps_io sd_*), drives A and B; D88 images
 	input   [1:0] img_mounted,
@@ -99,9 +101,14 @@ wire [3:0] ph   = CLK_MUL == 2 ? cnt[4:1] : cnt[3:0];
 wire       last = CLK_MUL == 2 ? cnt[0] : 1'b1;
 
 wire ce_cpu  = last && ph[2:0] == 3'd7;   // 4.028 MHz
+// Tape turbo: the CPU alone on every other clock (8x with CLK_MUL = 2, 4x with 1), a superset of ce_cpu's clocks, so
+// switching never puts two enables closer than 2 clocks (the RAM's registered read). The FDC, keyboard, PSG and video
+// keep their own rates.
+localparam TURBO = CLK_MUL == 2 ? 8 : 4;
+wire ce_cpu_run = cpu_turbo ? cnt[0] : ce_cpu;
 wire ce_char = last && ph == 4'd15;       // 2.014 MHz: CRTC advances at the end of phase 15
 assign ce_pix = last && ph[0];            // 16.11 MHz, see the video output below
-assign cpu_ce = ce_cpu;
+assign cpu_ce = ce_cpu_run;
 
 //------------------------------------------------------------------------------------------------
 // CPU
@@ -125,7 +132,7 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 (
 	.RESET_n(~cpu_reset),
 	.CLK(clk_sys),
-	.CEN(ce_cpu),
+	.CEN(ce_cpu_run),
 	.OUT0(1'b0),
 	.WAIT_n(1'b1),
 	.INT_n(int_n),
@@ -683,7 +690,7 @@ SN76496 psg
 );
 
 // Signed output (AUDIO_S = 1): the PSG (0-252 summed channels, 6048/ch max), beeper (6144) and cassette monitor
-wire [15:0] mix = {2'b00, psg_out, 6'd0} + {3'b000, psg_out, 5'd0} + (sound_out ? 16'h1800 : 16'h0000) + ((motor && (cas_out ^ tape_in)) ? 16'h0400 : 16'h0000);
+wire [15:0] mix = {2'b00, psg_out, 6'd0} + {3'b000, psg_out, 5'd0} + (sound_out ? 16'h1800 : 16'h0000) + ((tape_audio && motor && (cas_out ^ tape_in)) ? 16'h0400 : 16'h0000);
 assign audio_l = mix;
 assign audio_r = mix;
 

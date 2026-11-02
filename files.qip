@@ -13,6 +13,8 @@ set_global_assignment -name VERILOG_FILE rtl/mc6845v/mc6845.v
 set_global_assignment -name VERILOG_FILE rtl/sn76496/sn76496.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/dpram.sv
 set_global_assignment -name VERILOG_FILE rtl/spram.v
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777_tape.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777_tape_overlay.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/smc777.sv
 set_global_assignment -name SDC_FILE smc777.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE smc777.sv
