@@ -27,6 +27,13 @@ Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## Hand test by the user (10.0.2.11, 2026-11-03, SonySMC777_20261102 md5 93fc2886)
+
+- Pass: Choplifter on joystick 1 (fire = Trigger 1; hold fire + left/right turns the helicopter, fire + down faces
+  front), sound, keyboard, tape from the OSD (pop-up, CLOAD "", Rewind), CP/M SETUP 525 I with Interlace text =
+  SMC-70, SMC Paint with the mouse. Judged ready for a first release.
+- Not tried: joystick 2, analog/CRT output, BASIC SAVE by hand (done on mister192).
+
 ## Rename to SonySMC777 (2026-11-02, releases/SonySMC777_20261102.rbf)
 
 - Project, top and CONF_STR renamed SonySMC777 (SonySMC777.qpf/.qsf/.sdc/.sv); the games folder is now
