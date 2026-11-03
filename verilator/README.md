@@ -18,7 +18,7 @@ speed. The default build is the MiSTer configuration.
 
 ## How it is built
 
-- `sim.v` is the simulation top (`top`). It stands in for `smc777.sv` and instantiates the same machine,
+- `sim.v` is the simulation top (`top`). It stands in for `SonySMC777.sv` and instantiates the same machine,
   `rtl/smc777.sv`, so the core and the sim share all machine RTL. The C++ harness plays the part of hps_io.
 - The CPU is the VHDL T80 v350 (rtl/T80_v350, as SharpMZ2500_MiSTer), converted by `ghdl synth --out=verilog` to
   `gen/t80s.v` with the instance's generics fixed; `fix_port_aliases.py` restores port aliases ghdl drops. (tv80 was

@@ -27,6 +27,14 @@ Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## Rename to SonySMC777 (2026-11-02, releases/SonySMC777_20261102.rbf)
+
+- Project, top and CONF_STR renamed SonySMC777 (SonySMC777.qpf/.qsf/.sdc/.sv); the games folder is now
+  games/SonySMC777. rtl/smc777*.sv keep their names. Timing met: +3.021 ns setup, +0.247 ns hold (core PLL);
+  17,260 ALMs 41%, 454/553 RAM blocks 82%. No RTL change from SMC777_20261102.
+- Older SMC777_*.rbf removed from releases/ (in git history). Boards (.11, .126, .192, .14) moved to
+  games/SonySMC777 with the new rbf and SonySMC777_*.mgl; boots System 1.1J on mister192.
+
 ## Hardware (mister192, 2026-11-02, HDMI through MiSTerKVMS, releases/SMC777_20261102.rbf)
 
 - Tape slot: CONVERT, SFE, BYTE.SET, MAKEMAP, TAKOKU load at 8x (MAKEMAP and TAKOKU auto-run); CONVERT at Normal in

@@ -1,7 +1,7 @@
 `timescale 1ns/1ns
 //
 // Simulation top for the SMC-777 core: the machine (rtl/smc777.sv) with its ports made visible to the C++
-// harness (sim_headless.cpp). It stands in for smc777.sv (the MiSTer top); the harness plays hps_io
+// harness (sim_headless.cpp). It stands in for SonySMC777.sv (the MiSTer top); the harness plays hps_io
 // (ps2_key and the ioctl ROM download).
 //
 module top(

@@ -197,7 +197,7 @@ wire [1:0] ar = cfg[122:121];
 assign VIDEO_ARX = (!ar) ? 12'd4 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 
-// boot.rom (index 0, loaded by Main from games/SMC777/boot.rom): SMCROM.DAT (16 KiB IPL) followed by KANJIROM.DAT
+// boot.rom (index 0, loaded by Main from games/SonySMC777/boot.rom): SMCROM.DAT (16 KiB IPL) followed by KANJIROM.DAT
 // (144 KiB). Floppies: D88 images (the usual ".1dd" SMC-777 images are D88; rename or pick "all files").
 // Tape: a WAV (rtl/smc777_tape.sv), not remembered, rewound at every mount.
 // Layout: ~/dev2/osd-standard.md and tape-standard.md. P1 Machine, P2 Video, P3 Input, P4 Audio. Video settings
@@ -205,7 +205,7 @@ assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 // those of the earlier flat menu, so saved settings carry over.
 `include "build_id.v"
 localparam CONF_STR = {
-	"SMC777;;",
+	"SonySMC777;;",
 	"-;",
 	"S0,D881DDD77,Pri. Drive A;",
 	"S1,D881DDD77,Drive B;",
