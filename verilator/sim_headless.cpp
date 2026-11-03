@@ -47,6 +47,7 @@ struct Options {
     uint32_t    dump_every = 0;
     bool        double_lines = false;
     bool        border = false;           // --border: show the border colour around the picture
+    bool        smc70_il = false;         // --smc70-il: interlace text as the SMC-70 (OSD option)
     std::string out_dir = "out";
     std::string frame_log;
     std::vector<TypeCmd> types;
@@ -100,6 +101,7 @@ static void usage()
 "  --dump-every K         PNG of every Kth frame\n"
 "  --double-lines         PNGs at 640x400 (each line twice, as CSP's screenshots)\n"
 "  --border               show the border (port 23h) around the picture: 704x232 (OSD option)\n"
+"  --smc70-il             interlace sync & video text from RA[3:1], as the SMC-70 (OSD option)\n"
 "  --out DIR              output directory (default ./out)\n"
 "  --frame-log FILE       frame,fb_hash,cpu_cycles,pc per frame\n"
 "  --trace-cpu FILE       frame,cpu_cycle,pc at each instruction fetch (M1)\n"
@@ -176,6 +178,7 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--dump-every") o.dump_every = parse_num(next());
         else if (a == "--double-lines") o.double_lines = true;
         else if (a == "--border") o.border = true;
+        else if (a == "--smc70-il") o.smc70_il = true;
         else if (a == "--out") o.out_dir = next();
         else if (a == "--frame-log") o.frame_log = next();
         else if (a == "--trace-cpu") o.trace_file = next();
@@ -750,6 +753,7 @@ int Sim::run()
     if (!opt.load_file.empty()) {
         if (!load_state()) return 2;
         top->border_en = opt.border;
+        top->smc70_il = opt.smc70_il;
         top->mouse_en = opt.mouse;
         top->tape_turbo_req = !opt.tape_normal;
         top->tape_overlay_en = opt.tape_overlay;
@@ -768,6 +772,7 @@ int Sim::run()
     top->reset = 1;
     top->reset_warm = 0;
     top->border_en = opt.border;
+    top->smc70_il = opt.smc70_il;
     top->joy0 = 0; top->joy1 = 0;
     top->mouse_en = opt.mouse;
     top->ps2_mouse = 0;

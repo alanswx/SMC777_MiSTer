@@ -53,6 +53,7 @@ speed. The default build is the MiSTer configuration.
                          DY down from frame F (PS/2 packets of up to 100, one per ms), buttons B (1 left, 2 right)
   --reset-at F / --warm-reset-at F   cold / warm (RESET key) reset before frame F
   --border               the border colour around the picture (704x232), the OSD option
+  --smc70-il             interlace sync & video text from RA[3:1], as the SMC-70 (the OSD option Interlace text)
   --kanji FILE           kanji ROM (default ../bios/KANJIROM.DAT); --rom-dir DIR: DIR/SMCROM.DAT + DIR/KANJIROM.DAT
   --wav FILE             audio from reset release, 48 kHz 16-bit stereo
   --tape FILE[@SEC]      play a WAV into the cassette input from SEC seconds, while the motor relay is on

@@ -31,12 +31,15 @@ Floppies: D88 images on drives A and B (S0/S1). The SMC-777 disk images found as
 
 Laid out as the MiSTer computer-core OSD and tape standards (`osd-standard.md`, `tape-standard.md`): media on the
 top page, then the pages, then Apply and reset. The Video settings take effect at Apply and reset ("Changes pending"
-shows until then); media, Input, the tape rows and the buttons act at once.
+shows until then); media, Input, the tape rows, Interlace text and the buttons act at once.
 
 - Top: Pri. Drive A, Drive B (D88), Tape (WAV), Load ROM; Machine, Video, Input, Audio; Apply and reset (cold reset).
 - Machine: Tape speed (8x, Normal), Rewind tape, RESET key (warm reset: port 1Ch bit 7 = 1, the IPL keeps memory).
 - Video: Aspect ratio, Scandoubler Fx (HQ2x, CRT scanlines; the core is 15.7 kHz, the scandoubler is used for VGA
-  too), Border (the border colour, port 23h, around the 640x200 picture, as MAME; CSP does not draw it), Tape overlay.
+  too), Border (the border colour, port 23h, around the 640x200 picture, as MAME; CSP does not draw it), Tape overlay,
+  Interlace text (SMC-777 or SMC-70: how text looks in the CRTC's interlace sync & video mode, which only the SMC-70
+  CP/M's SETUP "525 I" uses. SMC-777 shows every other font line twice, probably as a real 777 does; SMC-70 shows
+  the whole font, as the SMC-70 would).
 - Input: Port 2 = Joystick or Mouse (the SMC-777 mouse on joystick port 2, for SMC Paint; the MiSTer's USB/PS/2
   mouse, left and right buttons). Joysticks: port 1 and 2, two triggers.
 - Audio: Tape audio (the cassette monitor: the tape signal in the sound while the motor runs).

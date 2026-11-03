@@ -83,7 +83,7 @@ checks an ID with H = $AA and the gap after it, and hung at a black screen witho
   (ColecoAdam is silent there too) after dvi_mode=0 and a reboot: a capture-side problem (card / splitter / server
   stream config, unreadable without sudo on misterubuntu). Next: check the user's MiSTer.ini (dvi_mode) and
   the power-on beep; capture on mister126 when it is free.
-- Open decision: SETUP's 525 I interlace text (below).
+- SETUP's 525 I interlace text: OSD Video > Interlace text (SMC-777 / SMC-70), see below.
 
 ## Remaining
 
@@ -115,8 +115,10 @@ checks an ID with H = $AA and the gap after it, and hung at a black screen witho
   converts them) boots to A> in the sim and in CSP; DIR and SETUP work. SETUP's Set Screen Attributes offers 525/625
   lines, non-interlaced or interlaced. 625 NI sets R4 = 26h (50 Hz). 525 I sets the CRTC to interlace sync & video
   (R8 = A3h, R9 = 0Eh: 16 rasters a row) and port 20h bit 4, an SMC-70-only bit; the core shows every other font line
-  twice (RA[2:0] from the HD46505), probably as a real SMC-777 does. Showing it as the SMC-70 would (font line =
-  RA[3:1]) is a choice to make. The SMC-70's 640x400 graphics mode (GM = 11) does not exist on the 777.
+  twice (RA[2:0] from the HD46505), probably as a real SMC-777 does. OSD Video > Interlace text = SMC-70 takes the
+  font line (and graphics line) from RA[3:1] while R8 = xx11b, so both fields show the whole font: SETUP's screen
+  reads cleanly in the sim (`--smc70-il`) and on mister192 (HDMI steady, release SonySMC777_20261102 rebuilt with
+  it: +3.206 ns setup, +0.248 ns hold, 41% ALMs). Port 20h bit 4 is still ignored. The SMC-70's 640x400 graphics mode (GM = 11) does not exist on the 777.
 - Floppy-less boot paths: auto-start ROM (70h), the SMC-70 (RTC, extra graphics modes) are not modelled.
 - Printer (22h/1Dh), RS-232, expansion bus: not modelled.
 - RAM/ROM bank switch: CSP's two-fetch delay is modelled; writes under the ROM go to RAM (MAME); CSP discards

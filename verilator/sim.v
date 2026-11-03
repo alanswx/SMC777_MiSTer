@@ -27,6 +27,7 @@ module top(
    input  [24:0] ps2_mouse,
    input         reset_warm,
    input         border_en,
+   input         smc70_il,
    input         tape_in,             // line-in (--tape), when no tape image is mounted
    output        tape_motor,
    input         tape_turbo_req,      // OSD Tape speed 8x
@@ -121,6 +122,7 @@ smc777 #(.CLK_MUL(CLK_MUL)) smc777
    .reset(reset),
    .reset_warm(reset_warm),
    .border_en(border_en),
+   .smc70_il(smc70_il),
    .ps2_key(ps2_key),
    .joy0(joy0), .joy1(joy1),
    .mouse_en(mouse_en), .ps2_mouse(ps2_mouse),

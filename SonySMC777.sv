@@ -230,6 +230,7 @@ localparam CONF_STR = {
 	"P2O[4:3],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"P2O[5],Border,Off,On;",
 	"P2O[8],Tape overlay,On,Off;",
+	"P2O[11],Interlace text,SMC-777,SMC-70;",
 
 	"P3O[6],Port 2,Joystick,Mouse;",
 
@@ -418,6 +419,7 @@ smc777 #(.CLK_MUL(2)) smc777
 	.reset(reset),
 	.reset_warm(warm),
 	.border_en(cfg[5]),
+	.smc70_il(status[11]),
 	.ps2_key(ps2_key),
 	.joy0(joystick_0[5:0]),
 	.joy1(joystick_1[5:0]),

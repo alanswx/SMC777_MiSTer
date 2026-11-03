@@ -29,6 +29,7 @@ module smc777 #(parameter CLK_MUL = 2)
 	input         reset,
 	input         reset_warm,         // with reset: warm start (port 1Ch bit 7 reads 1, the RESET key)
 	input         border_en,          // show the border (port 23h colour) around the 640x200 picture, as MAME
+	input         smc70_il,           // interlace sync & video (R8 = xx11b): font line from RA[3:1], as the SMC-70
 
 	input  [10:0] ps2_key,            // hps_io ps2_key
 	input   [5:0] joy0,               // MiSTer joystick bits: 0 right, 1 left, 2 down, 3 up, 4 button 1, 5 button 2
@@ -273,6 +274,7 @@ wire [3:0] mouse_nibble;
 wire [1:0] mouse_btn;
 reg  [3:0] pal_r[16], pal_g[16], pal_b[16];
 reg  [4:0] crtc_ar;                       // shadow of the HD46505 registers the renderer needs
+reg  [1:0] crtc_r8;
 reg  [6:0] crtc_r10;
 reg  [4:0] crtc_r11;
 reg [13:0] crtc_cursor;
@@ -303,6 +305,7 @@ always @(posedge clk_sys) begin
 		{vsup, sound_out, motor, cas_out} <= 4'b0000;
 		{use_pal_text, use_pal_graph} <= 2'b00;
 		mouse_strobe <= 1'b1;
+		crtc_r8 <= 2'b00;
 		warm_start <= reset_warm;
 	end
 	else begin
@@ -316,6 +319,7 @@ always @(posedge clk_sys) begin
 			case (lo)
 			8'h18: crtc_ar <= cpu_dout[4:0];
 			8'h19: case (crtc_ar)
+			       5'd8:  crtc_r8  <= cpu_dout[1:0];
 			       5'd10: crtc_r10 <= cpu_dout[6:0];
 			       5'd11: crtc_r11 <= cpu_dout[4:0];
 			       5'd14: crtc_cursor[13:8] <= cpu_dout[5:0];
@@ -549,10 +553,15 @@ wire        col40 = gcw[7];
 wire [10:0] txt_addr = col40 ? {ma[10:1], gcw[6]} : ma[10:0];
 wire [10:0] cur_addr = col40 ? {crtc_cursor[10:1], gcw[6]} : crtc_cursor[10:0];
 
+// Interlace sync & video (SMC-70 CP/M SETUP 525 I: R8 = A3h, R9 = 0Eh) counts RA 0,2..14 / 1,3..15 in the two
+// fields. The 777 takes RA[2:0] (each field shows font lines 0,2,4,6 twice); the SMC-70 option takes RA[3:1], so
+// both fields show the whole 8-line font.
+wire [2:0] fline = smc70_il && crtc_r8 == 2'b11 ? ra[3:1] : ra[2:0];
+
 always @(*) begin
 	txt_va  = txt_addr;
-	pcg_va  = {cram_v, ra[2:0]};
-	gram_va = {ra[2:0], ma[10:0], ph[3]};
+	pcg_va  = {cram_v, fline};
+	gram_va = {fline, ma[10:0], ph[3]};
 end
 
 // fetched in period N
