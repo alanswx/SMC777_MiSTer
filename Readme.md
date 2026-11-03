@@ -8,7 +8,7 @@ Status: verified in simulation against the Common Source Code Project (eSMC-777)
 BASIC (keyboard, typing, programs), Choplifter, Yakyuu-Kyou and S-OS boot, with screens pixel-identical to CSP's.
 SMC Paint 2.3 works with the mouse (OSD Port 2 = Mouse), Lode Runner (READ TRACK protection) runs. Tested on a
 MiSTer over HDMI: screens identical to CSP, floppy, keyboard, mouse and sound work. Builds in Quartus 17.0.2 and meets
-timing (clk_sys 64.44 MHz, +3.02 ns setup slack; 41% ALMs, 82% RAM blocks): `releases/SonySMC777_20261102.rbf`. See [TODO.md](TODO.md).
+timing (clk_sys 64.44 MHz, +3.03 ns setup slack; 40% ALMs, 82% RAM blocks): `releases/SonySMC777_20261103.rbf`. See [TODO.md](TODO.md).
 
 - `SonySMC777.sv` MiSTer top (hps_io, PLL, floppy slots, cassette ADC, video_mixer), `rtl/smc777.sv` the machine,
   `rtl/smc777_kbd.sv` keyboard (8041), `rtl/smc777_mouse.sv` mouse, `rtl/smc777_fdc.sv` floppy (wd1793 with D88), `rtl/T80_v350` the CPU.

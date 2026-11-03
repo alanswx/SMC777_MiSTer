@@ -27,6 +27,12 @@ Status 2026-10-17: verified in simulation against CSP (eSMC-777) and on a MiSTer
 Also fixed: the HD46505 Verilog port had lost its HSYNC width counter (HSYNC stuck high: no horizontal sync on a
 real display); restored from mc6845.vhd.
 
+## sys update (2026-11-03, releases/SonySMC777_20261103.rbf)
+
+- sys/ is Template_MiSTer e901a9f unmodified (was d1b8e25, 2023-03-25, also unmodified); the top includes
+  sys/emu_ports.vh; qsf/qpf/sdc/srf/clean.bat are the template's. Timing met: +3.029 ns setup, +0.249 ns hold;
+  16,901 ALMs 40%, 455/553 RAM blocks. mister192: System 1.1J BASIC, tape CLOAD + LIST, Transitt, OSD.
+
 ## Hand test by the user (10.0.2.11, 2026-11-03, SonySMC777_20261102 md5 93fc2886)
 
 - Pass: Choplifter on joystick 1 (fire = Trigger 1; hold fire + left/right turns the helicopter, fire + down faces
